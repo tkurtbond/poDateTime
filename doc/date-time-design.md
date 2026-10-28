@@ -1146,6 +1146,21 @@ GNUmakefile     all, check, check-o2, check-oc, install, vax
     zones, 1970-2040: New York, London, Lord Howe (a 30-minute DST),
     Kolkata, Chatham, Apia (the skipped day), Casablanca (negative DST)
     and Dublin.
+  - The offset and abbreviation come from `zoneinfo`, which must agree
+    with glibc's `localtime`; the daylight saving flag comes from glibc,
+    for `zoneinfo` has none.
+  - POSIX rules are checked against glibc's `localtime` with `TZ` set to
+    the rule, not against `zoneinfo`, which counts `Jn` wrongly in leap
+    years, counts `n` from 1, and reads a rule in the year of UTC.
+    glibc uses no rule before 1970 and also reads a rule in the year of
+    UTC, so the tests check earlier years by the 400-year cycle, leave
+    out the hours at a year's edge where the two years differ, and
+    check some of those by hand.
+  - The zone tables are made from TZif files checked in under
+    `test/data/zoneinfo/`, in both zic's fat and slim forms, with a
+    few made-up files for version 1, version 4, leap-second records and
+    damage. The system's own database is checked only for facts every
+    tzdata version agrees on (Q17).
 - **Self-checking:** every string procedure is tested by writing a value
   and reading it back, and by a table of strings that must be refused.
 - **Against the system:** `Format` is compared with the C library's
@@ -1338,3 +1353,15 @@ Each step is reviewed before the next one starts.
   every `Period` is written and read back. Java's per-field signs
   throughout read less naturally; refusing mixed signs would leave
   valid `Period`s that cannot be written.*
+- **Q17.** What zone data do the TZif tests read? Found during step 4:
+  the hosts' databases differ (2026c fat on atla, 2023c on OpenBSD,
+  2026c slim on NetBSD, 2026b on FreeBSD), and Casablanca's
+  transitions differ between them. *Decided 2026-10-28: the tables'
+  own TZif files are checked in under `test/data/zoneinfo/`, fat and
+  slim, made with `zic`, with made-up files for the edge cases; the
+  tables come from Python's `ZoneInfo.from_file` on those files. Every
+  host, and later the VAX, then gives the same results, and a tzdata
+  update cannot break the tests. The system's database is checked only
+  for facts all versions agree on. Reading it with tables limited to
+  agreed years would break at the next tzdata release; making the
+  tables at test time needs Python, which NetBSD and the VAX lack.*

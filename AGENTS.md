@@ -23,9 +23,11 @@ their tests) is done and reviewed. Q11-Q14 were decided
 during it. Step 2 (`TimePlatform` for LLVM, and `Clocks`) is done and
 reviewed; `TimePlatform`'s zone procedures come with step 4. Step 3
 (`TimeStrings`, fixed formats) is done and reviewed; Q15 and Q16 were
-decided during it. Step 4 (`TimeZones`) is next. Steps 1-3 pass under
-both models on Linux and on the local BSD VMs (cymoril, OpenBSD i386;
-artos, NetBSD amd64; alerik, FreeBSD amd64), not yet on the VAX.
+decided during it. Step 4 (`TimeZones`, and `TimePlatform`'s zone
+procedures for LLVM) is done and reviewed; Q17 was decided during it.
+Step 5 is next. Steps 1-4 pass under both models on Linux and on the
+local BSD VMs (cymoril, OpenBSD i386; artos, NetBSD amd64; alerik,
+FreeBSD amd64), not yet on the VAX.
 
 ## The compiler
 

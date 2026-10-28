@@ -1,14 +1,13 @@
 MODULE TimePlatform;
 
   (* The operating system's part of the library, for LLVM (design section
-     11): the clocks, in nanoseconds. Internal: programs use Clocks. The
-     work is in TimePlatform.c beside this file, compiled by clang for the
-     target from the system's own headers, under names that start with
+     11): the clocks, in nanoseconds, and the local zone, which is the C
+     library's. Internal: programs use Clocks and TimeZones. The work is
+     in TimePlatform.c beside this file, compiled by clang for the target
+     from the system's own headers, under names that start with
      "TimePlatform.-".
 
-     The local zone's part of the interface (SystemLocal, LocalOffset,
-     LocalZoneName, LocalRule, ZoneInfoDirectory) comes with TimeZones,
-     step 4 of design 12.4. *)
+     No ASSERTs. *)
 
   IMPORT SYSTEM;
 
@@ -18,6 +17,13 @@ MODULE TimePlatform;
   PROCEDURE ["C", "TimePlatform.-wall-resolution"] CWallResolution(): SYSTEM.INT64;
   PROCEDURE ["C", "TimePlatform.-monotonic-resolution"] CMonotonicResolution(): SYSTEM.INT64;
   PROCEDURE ["C", "TimePlatform.-sleep"] CSleep(nanoseconds: SYSTEM.INT64);
+  PROCEDURE ["C", "TimePlatform.-system-local"] CSystemLocal(): SYSTEM.INT32;
+  PROCEDURE ["C", "TimePlatform.-local-offset"] CLocalOffset(seconds: SYSTEM.INT64;
+    offset, isDst, abbreviation: SYSTEM.ADDRESS; length: SYSTEM.INT32): SYSTEM.INT32;
+  PROCEDURE ["C", "TimePlatform.-local-zone-name"] CLocalZoneName(name: SYSTEM.ADDRESS;
+    length: SYSTEM.INT32);
+  PROCEDURE ["C", "TimePlatform.-zone-info-directory"] CZoneInfoDirectory(dir: SYSTEM.ADDRESS;
+    length: SYSTEM.INT32);
 
   (* UTC, as POSIX seconds since 1970 and 0 <= nanosecond < 10^9 *)
   PROCEDURE WallClock*(VAR seconds: HUGEINT; VAR nanosecond: LONGINT);
@@ -54,5 +60,40 @@ MODULE TimePlatform;
   BEGIN
     CSleep(nanoseconds)
   END Sleep;
+
+  (* whether LocalOffset answers for the local zone; on Unix it does *)
+  PROCEDURE SystemLocal*(): BOOLEAN;
+  BEGIN
+    RETURN CSystemLocal() # 0
+  END SystemLocal;
+
+  (* the local zone at POSIX time seconds; FALSE where the C library
+     cannot say, as beyond a 32-bit time_t *)
+  PROCEDURE LocalOffset*(seconds: HUGEINT; VAR offset: LONGINT; VAR isDst: BOOLEAN;
+                         VAR abbreviation: ARRAY OF CHAR): BOOLEAN;
+    VAR o, dst: SYSTEM.INT32; ok: BOOLEAN;
+  BEGIN
+    ok := CLocalOffset(seconds, SYSTEM.ADR(o), SYSTEM.ADR(dst), SYSTEM.ADR(abbreviation),
+      SHORT(LEN(abbreviation))) # 0;
+    IF ok THEN offset := o;  isDst := dst # 0 END;
+    RETURN ok
+  END LocalOffset;
+
+  PROCEDURE LocalZoneName*(VAR name: ARRAY OF CHAR);
+  BEGIN
+    CLocalZoneName(SYSTEM.ADR(name), SHORT(LEN(name)))
+  END LocalZoneName;
+
+  (* for VMS, where the TZ logical name may hold a POSIX rule; Unix has
+     the C library *)
+  PROCEDURE LocalRule*(VAR rule: ARRAY OF CHAR): BOOLEAN;
+  BEGIN
+    RETURN FALSE
+  END LocalRule;
+
+  PROCEDURE ZoneInfoDirectory*(VAR dir: ARRAY OF CHAR);
+  BEGIN
+    CZoneInfoDirectory(SYSTEM.ADR(dir), SHORT(LEN(dir)))
+  END ZoneInfoDirectory;
 
 END TimePlatform.

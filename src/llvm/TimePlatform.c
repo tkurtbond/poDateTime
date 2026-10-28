@@ -8,13 +8,23 @@
    system's own headers know that, so these wrappers are compiled by clang
    for the target, as Peaseblossom's Platform.c is.
 
+   The local zone is the C library's: localtime_r, with the BSD and glibc
+   fields tm_gmtoff and tm_zone. _TIME_BITS gives 32-bit glibc a 64-bit
+   time_t; it needs _FILE_OFFSET_BITS with it.
+
    The interface is in fixed-width types only, so that it means the same
    under both of poc's size models. The names contain "-", so that no
    Oberon name can be the same. */
 
+#define _FILE_OFFSET_BITS 64
+#define _TIME_BITS 64
+
 #include <errno.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 #define NAME(n) __asm__("TimePlatform.-" n)
 
@@ -69,4 +79,72 @@ void TimePlatformSleep(int64_t nanoseconds)
   request.tv_sec = (time_t)(nanoseconds / 1000000000);
   request.tv_nsec = (long)(nanoseconds % 1000000000);
   while (nanosleep(&request, &remaining) < 0 && errno == EINTR) request = remaining;
+}
+
+/* s into to, cut to fit length bytes with its 0 */
+static void Copy(char *to, int32_t length, const char *s)
+{
+  int32_t i = 0;
+  if (length <= 0) return;
+  while (s[i] != 0 && i < length - 1) { to[i] = s[i]; i++; }
+  to[i] = 0;
+}
+
+/* Called once, before the first LocalOffset: localtime_r need not read TZ
+   itself, as localtime does. */
+int32_t TimePlatformSystemLocal(void) NAME("system-local");
+int32_t TimePlatformSystemLocal(void)
+{
+  tzset();
+  return 1;
+}
+
+/* The local offset in seconds east, whether it is daylight saving time,
+   and the abbreviation, at POSIX time seconds; 0 if time_t cannot hold
+   seconds or localtime_r fails. */
+int32_t TimePlatformLocalOffset(int64_t seconds, int32_t *offset, int32_t *isDst,
+                                char *abbreviation, int32_t length) NAME("local-offset");
+int32_t TimePlatformLocalOffset(int64_t seconds, int32_t *offset, int32_t *isDst,
+                                char *abbreviation, int32_t length)
+{
+  time_t t = (time_t)seconds;
+  struct tm tm;
+  if ((int64_t)t != seconds || localtime_r(&t, &tm) == NULL) return 0;
+  *offset = (int32_t)tm.tm_gmtoff;
+  *isDst = tm.tm_isdst > 0;
+  Copy(abbreviation, length, tm.tm_zone != NULL ? tm.tm_zone : "");
+  return 1;
+}
+
+/* TZ without a leading ":", "UTC" for a TZ that is set but empty, as the
+   C library reads it; else what /etc/localtime links to, after its last
+   "zoneinfo/"; else "localtime". */
+void TimePlatformLocalZoneName(char *name, int32_t length) NAME("local-zone-name");
+void TimePlatformLocalZoneName(char *name, int32_t length)
+{
+  char target[1024];
+  const char *tz = getenv("TZ"), *p, *after;
+  ssize_t n;
+  if (tz != NULL) {
+    if (*tz == ':') tz++;
+    Copy(name, length, *tz != 0 ? tz : "UTC");
+    return;
+  }
+  n = readlink("/etc/localtime", target, sizeof target - 1);
+  if (n > 0) {
+    target[n] = 0;
+    after = NULL;
+    for (p = strstr(target, "zoneinfo/"); p != NULL; p = strstr(p + 1, "zoneinfo/"))
+      after = p + strlen("zoneinfo/");
+    if (after != NULL && *after != 0) { Copy(name, length, after); return; }
+  }
+  Copy(name, length, "localtime");
+}
+
+/* TZDIR, or else /usr/share/zoneinfo */
+void TimePlatformZoneInfoDirectory(char *dir, int32_t length) NAME("zone-info-directory");
+void TimePlatformZoneInfoDirectory(char *dir, int32_t length)
+{
+  const char *tzdir = getenv("TZDIR");
+  Copy(dir, length, tzdir != NULL && *tzdir != 0 ? tzdir : "/usr/share/zoneinfo");
 }

@@ -11,11 +11,12 @@ BUILD := build
 # a dependency only: poc compiles TimePlatform.c beside TimePlatform.Mod itself
 SRCS := src/llvm/TimePlatform.Mod $(wildcard src/*.Mod)
 C_SRCS := src/llvm/TimePlatform.c
-TEST_SRCS := test/TimeTests.Mod $(wildcard test/data/*.Mod)
-TESTS := DurationsTest InstantsTest CalendarTest ClocksTest TimeStringsTest
+TEST_SRCS := test/TimeTests.Mod $(wildcard test/data/*.Mod) $(shell find test/data/zoneinfo -type f)
+TESTS := DurationsTest InstantsTest CalendarTest ClocksTest TimeStringsTest TimeZonesTest
 IMPORTS := -import-path src -import-path src/llvm -import-path test -import-path test/data
+ZONEINFO := $(CURDIR)/test/data/zoneinfo
 
-.PHONY: all check check-o2 check-oc clean data
+.PHONY: all check check-o2 check-oc clean data zone-files
 .SECONDEXPANSION:
 
 all: $(BUILD)/O2/stamp $(BUILD)/OC/stamp
@@ -35,9 +36,13 @@ $(BUILD)/%.passed: $(SRCS) $(C_SRCS) $(TEST_SRCS) test/$$(notdir $$*).Mod test/$
 	mkdir -p $(BUILD)/$(dir $*)
 	$(POC) -$(patsubst %/,%,$(dir $*)) -output-dir $(BUILD)/$(dir $*) $(IMPORTS) \
 	  -o $(BUILD)/$* test/$(notdir $*).Mod
-	$(BUILD)/$* > $(BUILD)/$*.out
+	$(RUN_ENV) $(BUILD)/$* > $(BUILD)/$*.out
 	diff -u test/$(notdir $*).expected $(BUILD)/$*.out
 	touch $@
+
+# Named reads the slim files, and the C library the fat America/New_York
+$(BUILD)/O2/TimeZonesTest.passed $(BUILD)/OC/TimeZonesTest.passed: \
+  RUN_ENV = TZ=$(ZONEINFO)/fat/America/New_York TZDIR=$(ZONEINFO)/slim
 
 # the reference tables, which need Python; they are checked in, so that
 # the tests do not
@@ -45,6 +50,11 @@ data:
 	python3 -I tools/calendar-data.py > test/data/CalendarData.Mod
 	python3 -I tools/instants-data.py > test/data/InstantsData.Mod
 	python3 -I tools/strings-data.py > test/data/StringsData.Mod
+	python3 -I tools/zones-data.py > test/data/ZonesData.Mod
+
+# the TZif files the zone tables are made from, from the system's tzdata.zi
+zone-files:
+	python3 -I tools/zone-files.py
 
 clean:
 	rm -rf $(BUILD)
