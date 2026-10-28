@@ -46,7 +46,9 @@ record the decision in the design document.
   
   No record or array literals and no field initializers. The library
   cannot be `-strict` clean, because it needs `HUGEINT`.
-- **Only `TimePlatform` is per target** (`src/llvm/`, `src/vax/`).
+- **Only `TimePlatform` is per target** (`src/llvm/`, `src/vax/`). The
+  VAX-only `VmsInstants` (`src/vax/`) is the one module that uses
+  `VMSLIB`.
   Everything in `src/` is portable and compiled unchanged for both.
 - **Module names** must not collide with poc's runtime modules, nor with
   VMSLIB's `DateTimes` and `Timers`. Oberon has one global module

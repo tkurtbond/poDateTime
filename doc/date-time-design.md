@@ -349,6 +349,7 @@ Python, Ruby and C were run on atla on 2026-10-28.
 | `Clocks` | `Now`, `Monotonic`, `ProcessTime`, `Sleep`, resolutions | `Instants`, `Durations`, `TimePlatform` | no |
 | `TimeStrings` | ISO 8601 / RFC 3339 output and input; `%` patterns; durations and periods as text | all of the above | no |
 | `TimePlatform` | the operating system's part: the clocks, the local offset, the zoneinfo directory | `SYSTEM`, `Platform` (VAX: `STARLET`) | **yes**: `src/llvm/` (with a C part) and `src/vax/` |
+| `VmsInstants` | conversions between `VMSLIB`'s `DateTimes.Time` and `Instant`/`Duration` (§11.1) | `DateTimes`, `Durations`, `Instants`, `TimeZones` | **VAX only**: `src/vax/` |
 
 The dependencies go one way, with no cycles:
 
@@ -358,8 +359,9 @@ Durations ← Instants ← Calendar ← TimeZones ← TimeStrings
                   Clocks ← TimePlatform
 ```
 
-**Only `TimePlatform` differs between the targets.** Everything else is
-portable Oberon, compiled unchanged for LLVM and for the VAX. That
+**Only `TimePlatform` differs between the targets**, and the VAX
+library adds `VmsInstants`. Everything else is portable Oberon, compiled
+unchanged for LLVM and for the VAX. That
 follows Peaseblossom's own split between `rtl/llvm` and `rtl/vax`.
 `TimePlatform` is internal: programs import `Clocks` and `TimeZones`
 instead.
@@ -367,10 +369,9 @@ instead.
 ### 4.2 Names
 
 - **The module names were chosen to avoid poc's runtime modules and
-  `VMSLIB`'s `DateTimes`/`Timers`.** One name needs review: `Calendar`.
-  Ada's name for it is the natural one, but it is short and common. If a
-  user library collides with it, the fallback is `CivilTimes`. This is
-  open question Q1.
+  `VMSLIB`'s `DateTimes`/`Timers`.** `Calendar`, Ada's name for the
+  civil module, is short and common, but the review found it safe (Q1,
+  decided 2026-10-28).
 - **The library is `podatetime`:** `poc -library podatetime ...`, and
   `PODATETIME` on VMS.
 
@@ -394,7 +395,9 @@ instead.
   `Durations.min`/`max`, or to `Instants.earliest`/`latest`, not wrapped.
   Go's `time.Sub` does the same. This applies to the library's own
   procedures only. `+` on two `Duration`s is ordinary `HUGEINT` addition
-  and wraps, as poc promises.
+  and wraps, as poc promises. Where overflow can come from input, a
+  checked form (`CheckedBetween` and the like) returns `BOOLEAN` instead.
+  See [duration-overflow.md](duration-overflow.md) (Q4).
 - **The language extensions used**, and no others:
   - `HUGEINT`;
   - `ASSERT`;
@@ -437,6 +440,7 @@ MODULE Durations;
   PROCEDURE Sum*(a, b: Duration): Duration;          (* saturating a + b *)
   PROCEDURE Difference*(a, b: Duration): Duration;   (* saturating a - b *)
   PROCEDURE Scale*(d: Duration; n: HUGEINT): Duration;   (* saturating d * n *)
+  PROCEDURE CheckedScale*(VAR r: Duration; d: Duration; n: HUGEINT): BOOLEAN;   (* FALSE on overflow *)
   PROCEDURE Abs*(d: Duration): Duration;             (* ABS, MIN saturates to MAX *)
   PROCEDURE Whole*(d, unit: Duration): HUGEINT;      (* d / unit, toward zero: Whole(90 * minute, hour) = 1 *)
   PROCEDURE Truncate*(d, unit: Duration): Duration;  (* toward zero, to a multiple of unit *)
@@ -446,6 +450,7 @@ MODULE Durations;
                    VAR days, hours, minutes, seconds, nanoseconds: LONGINT);   (* of ABS(d) *)
   PROCEDURE ToSeconds*(d: Duration): LONGREAL;
   PROCEDURE FromSeconds*(x: LONGREAL): Duration;    (* rounded, saturating; NaN gives 0 *)
+  PROCEDURE CheckedFromSeconds*(VAR d: Duration; x: LONGREAL): BOOLEAN;   (* FALSE on overflow, NaN, infinity *)
 END Durations.
 ```
 
@@ -494,6 +499,7 @@ MODULE Instants;
   PROCEDURE Add*(VAR r: Instant; t: Instant; d: Durations.Duration);        (* saturating at earliest/latest *)
   PROCEDURE Subtract*(VAR r: Instant; t: Instant; d: Durations.Duration);
   PROCEDURE Between*(later, earlier: Instant): Durations.Duration;          (* later - earlier, saturating *)
+  PROCEDURE CheckedBetween*(VAR d: Durations.Duration; later, earlier: Instant): BOOLEAN;   (* FALSE beyond ±292 years *)
   PROCEDURE Compare*(a, b: Instant): INTEGER;           (* -1, 0, 1 *)
   PROCEDURE Equal*(a, b: Instant): BOOLEAN;
   PROCEDURE Before*(a, b: Instant): BOOLEAN;
@@ -515,7 +521,10 @@ END Instants.
   calendar conversion or a parse.
 - **The range is limited to the years -9999..9999**, so that every
   instant converts to a date and can be written in ISO 8601's four-digit
-  (or signed, expanded) years.
+  (or signed, expanded) years. The record itself could reach much
+  further; the limit is the same as `Calendar`'s years, so that
+  `FromInstant`, `FromUTCInstant` and `TimeZones.ToLocal` need no
+  failure result (Q2, decided 2026-10-28).
 
 ### 6.2 Leap seconds
 
@@ -523,7 +532,10 @@ They are not modelled. The timeline is POSIX time: every day has 86 400
 seconds. This is the choice of C, POSIX, Python, Ruby, Go and C++'s
 `system_clock`. It is what every Unix clock reports, and VMS 5.5-2 knows
 nothing of leap seconds either. "Right" TZif zones, whose transitions
-count leap seconds, are refused (section 8.4). See Q5.
+count leap seconds, are refused (section 8.3). The timestamp readers
+accept a second of `60` where a leap second can occur, and read it as
+the last nanosecond of the minute before (section 10.1). See Q5 and
+[leap-seconds.md](leap-seconds.md).
 
 ### 6.3 Subtracting and adding date/times: which arithmetic
 
@@ -625,6 +637,7 @@ MODULE Calendar;
   (* elapsed arithmetic on civil date-times, as if every day were 86 400 s (no zone) *)
   PROCEDURE AddDuration*(VAR dt: DateTime; d: Durations.Duration): BOOLEAN;
   PROCEDURE Difference*(later, earlier: DateTime): Durations.Duration;   (* saturating *)
+  PROCEDURE CheckedDifference*(VAR d: Durations.Duration; later, earlier: DateTime): BOOLEAN;
 
   (* civil <-> instant at a known offset; no zone rules are involved *)
   PROCEDURE ToInstant*(odt: OffsetDateTime; VAR t: Instants.Instant);
@@ -755,8 +768,11 @@ This is portable code, with no file access.
   A zone name often comes from user input, and must not reach outside
   the directory.
 - Leap-second records are refused (section 6.2).
-- The reader is portable Oberon over `Files`, so it works on VMS too if
-  a site copies TZif files there (Q6).
+- **On VMS, `Named` always returns `FALSE`**, for simplicity (Q6,
+  decided 2026-10-28). There is no zoneinfo directory there, and
+  `TimePlatform.ZoneInfoDirectory` gives `""`. The reader itself is
+  portable Oberon over `Files`, so `FromFile` still works on VMS for a
+  program that brings its own TZif file.
 
 **`Local()`**, decided per target by `TimePlatform` when it is first
 called:
@@ -871,8 +887,15 @@ MODULE TimeStrings;
   time they also take a space, which RFC 3339 allows.
 - They take 1-9 fractional digits, and the offsets `Z`, `±hh:mm` and
   `±hh`.
-- **The basic format (`20261028T140509Z`) is not read.** That is Q3.
-- **A second of `60` is refused** (section 6.2).
+- **The basic format (`20261028T140509Z`) is not read**, so that a
+  malformed string is less likely to be read as something (Q3, decided
+  2026-10-28). A program that needs it can use a pattern such as
+  `%Y%m%dT%H%M%S%z`.
+- **A second of `60`** is accepted only by `ReadOffsetDateTime`,
+  `ReadInstant` and `Parse` with an offset, and only where the UTC time
+  is 23:59:60 on the last day of a month. It is read as `59.999999999`.
+  Everywhere else it is refused. The rule and the reasons are in
+  [leap-seconds.md](leap-seconds.md).
 - **`ReadDuration`** takes:
   - the ISO form `[-]P[nW][nD][T[nH][nM][n[.f]S]]`, with `D` read as
     exactly 24 hours and `W` as 7 days, as Java's `Duration.parse` reads
@@ -938,7 +961,7 @@ where the C directives are not enough:
   - A day of the week that disagrees with the date fails.
   - `%y` reads 69-99 as 19xx and 00-68 as 20xx, POSIX's pivot.
 
-## 11. `TimePlatform`, the only per-target module
+## 11. `TimePlatform`, the per-target module
 
 ```oberon
 MODULE TimePlatform;   (* internal: for Clocks and TimeZones *)
@@ -972,9 +995,51 @@ END TimePlatform.
   - It needs `POCRTL` and `VMSDEF`, not `VMSLIB`.
   - Facts about VMS come from the VAX/VMS 5.5-2 manuals only, as
     Peaseblossom's `AGENTS.md` requires.
-- **An optional VAX-only module, `VmsInstants`,** could convert between
-  `VMSLIB`'s `DateTimes.Time` and an `Instant` for programs that use
-  both. It is not in the first version (Q9).
+### 11.1 `VmsInstants`, VAX only
+
+This module converts between `VMSLIB`'s `DateTimes.Time` and this
+library's types, for programs that use both. It is in the first VAX
+version (Q9, decided 2026-10-28).
+
+```oberon
+MODULE VmsInstants;   (* VAX only: src/vax/ *)
+  IMPORT DateTimes, Durations, Instants, TimeZones;
+
+  (* absolute times: a DateTimes.Time is local time, as SYS$GETTIM gives it *)
+  PROCEDURE ToInstant*(t: DateTimes.Time; choice: INTEGER; VAR i: Instants.Instant): BOOLEAN;
+  PROCEDURE FromInstant*(VAR t: DateTimes.Time; i: Instants.Instant): BOOLEAN;
+
+  (* delta times: a DateTimes.Time below zero *)
+  PROCEDURE ToDuration*(t: DateTimes.Time; VAR d: Durations.Duration): BOOLEAN;
+  PROCEDURE FromDuration*(VAR t: DateTimes.Time; d: Durations.Duration): BOOLEAN;
+END VmsInstants.
+```
+
+**The time zone.** A VMS absolute time is local, so both directions go
+through `TimeZones.Local()`, the same zone `Clocks.Now` uses (§8.3). As a
+result, `VmsInstants.FromInstant` of `Clocks.Now` agrees with
+`DateTimes.Now()` to within the clock's 10 ms tick.
+
+**`ToInstant`:**
+- resolves the local time with `choice`, as `TimeZones.ToInstant` does;
+- returns `FALSE` for a delta time, for a year past 9999, and for a
+  `strict` choice that meets a gap or an overlap.
+
+**`FromInstant`** returns `FALSE` for an instant before
+1858-11-17 00:00 local, which VMS cannot represent.
+
+**Deltas:**
+- `ToDuration` gives a positive `Duration` for a delta time, and returns
+  `FALSE` for an absolute time.
+- `FromDuration` gives a delta time, truncated to 100 ns. It returns
+  `FALSE` for a duration shorter than 100 ns, since a zero quadword is
+  not a delta time.
+
+**What it needs:**
+- It is the only module in the library that needs `VMSLIB`.
+- Programs that import it must link `VMSLIB` as well.
+- `DateTimes.Format` (`LIB$FORMAT_DATE_TIME`) works on its results; see
+  Q10.
 
 ## 12. Build, tests and order of work
 
@@ -983,7 +1048,7 @@ END TimePlatform.
 ```
 src/            Durations Instants Calendar TimeZones Clocks TimeStrings (.Mod)
 src/llvm/       TimePlatform.Mod TimePlatform.c
-src/vax/        TimePlatform.Mod
+src/vax/        TimePlatform.Mod VmsInstants.Mod
 test/           one test program per module, expected output beside it
 test/data/      reference tables generated by Python (tools/), checked in
 examples/       small programs for the README
@@ -1031,24 +1096,40 @@ Each step is reviewed before the next one starts.
 4. `TimeZones`: UTC, `Fixed`, `Posix`, the system's `Local`, then the
    TZif reader with `Named`.
 5. `TimeStrings`, patterns (10.2).
-6. `TimePlatform` for the VAX, and the whole test suite on VAX/VMS 5.5-2.
+6. `TimePlatform` and `VmsInstants` for the VAX, and the whole test suite
+   on VAX/VMS 5.5-2.
 
 ## 13. Open questions for review
 
 - **Q1.** Is `Calendar` the right name for the civil module, or should it
-  be `CivilTimes`, to avoid colliding with a user's module?
+  be `CivilTimes`, to avoid colliding with a user's module? *Decided
+  2026-10-28: `Calendar` is safe and stays.*
 - **Q2.** Should an `Instant` have nanosecond resolution and a range
-  limited to years ±9999, as proposed, or a wider range?
+  limited to years ±9999, as proposed, or a wider range? *Decided
+  2026-10-28: as proposed. Nanoseconds, and the range tied to
+  `Calendar.minYear .. maxYear`, so that converting an instant to a date
+  cannot fail. Widening the years later changes only those constants and
+  the tests.*
 - **Q3.** Should the readers also take ISO 8601's basic format
   (`20261028T140509Z`)? It is cheap to add, but makes a malformed string
-  more likely to be read as something.
+  more likely to be read as something. *Decided 2026-10-28: no. The
+  readers take the extended format only, so that malformed strings are
+  less likely to be read as something.*
 - **Q4.** Should `Durations` saturate (proposed), or `ASSERT` on
-  overflow?
+  overflow? *Decided 2026-10-28: the procedures that return a result
+  saturate, and checked forms with `BOOLEAN` results are added where
+  overflow can come from input. The options and the reasons are in
+  [duration-overflow.md](duration-overflow.md).*
 - **Q5.** Should leap seconds be modelled in any way, for example with a
-  `utc_clock`-style conversion? The proposal is no.
+  `utc_clock`-style conversion? The proposal is no. *Decided
+  2026-10-28: they are not modelled. The timestamp readers accept `:60`
+  where a leap second can occur, and read it as `:59.999999999`. A
+  `LeapSeconds` module is possible future work, not planned. See
+  [leap-seconds.md](leap-seconds.md).*
 - **Q6.** On VMS, should `Named` be offered, reading TZif files a site
   copies to a directory named by a logical name, or should it be left
-  out?
+  out? *Decided 2026-10-28: left out, for simplicity. `Named` returns
+  `FALSE` on VMS, and `FromFile` still works (§8.3).*
 - **Q7.** Does VAX/VMS 5.5-2 define `SYS$TIMEZONE_DIFFERENTIAL`, or did
   it arrive with DECdts or OpenVMS 6? This has to be checked against the
   5.5-2 manuals. If it is absent, only the `TZ` logical and `Fixed(0)`
@@ -1057,7 +1138,9 @@ Each step is reviewed before the next one starts.
   `SYS$GETTIM`, such as `EXE$GL_ABSTIM_TICS` through `SYS.STB`, that an
   unprivileged program can read?
 - **Q9.** Should `VmsInstants` (section 11) be in the first VAX
-  version?
+  version? *Decided 2026-10-28: yes. Its interface is in §11.1.*
 - **Q10.** Should the patterns also take VMS's `LIB$FORMAT_DATE_TIME`
   directives (`!Y4-!MN0-!D0`), for programs ported from VMS? The
-  proposal is no: `%` only.
+  proposal is no: `%` only. *Decided 2026-10-28: no. A VMS program that
+  needs VMS's directives uses `LIB$FORMAT_DATE_TIME` directly, through
+  `DateTimes.Format`, with `VmsInstants.FromInstant` to get the time.*
