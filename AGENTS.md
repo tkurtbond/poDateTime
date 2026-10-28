@@ -23,8 +23,9 @@ their tests) is done and reviewed. Q11-Q14 were decided
 during it. Step 2 (`TimePlatform` for LLVM, and `Clocks`) is done and
 reviewed; `TimePlatform`'s zone procedures come with step 4. Step 3
 (`TimeStrings`, fixed formats) is done and reviewed; Q15 and Q16 were
-decided during it. Step 4 (`TimeZones`) is next. Steps 1-3 have been
-tested on Linux only, not on the BSDs or the VAX.
+decided during it. Step 4 (`TimeZones`) is next. Steps 1-3 pass under
+both models on Linux and on the local BSD VMs (cymoril, OpenBSD i386;
+artos, NetBSD amd64; alerik, FreeBSD amd64), not yet on the VAX.
 
 ## The compiler
 
@@ -37,6 +38,9 @@ tested on Linux only, not on the BSDs or the VAX.
   the 64-bit `LONGINT`, and cuts the value without a word; a `HUGEINT`
   cannot be assigned to a `LONGINT` at all. Use `SHORT` only for values
   that fit in 32 bits, and `TimeStrings.Long`'s pieces otherwise.
+- **On i386 a `LONGREAL` result is an 80-bit x87 value** until it is
+  stored, so a function's result compared at once can differ from the
+  same value stored. Tests store it in a global first.
 - **Building and testing:** `make` builds the library under both size
   models in `build/`; `make check` runs the tests under both.
 - **`~/Repos/Oberon/Peaseblossom` is reference only.** Read its
@@ -119,7 +123,10 @@ Design §12.3 has the details. In short:
   BSDs or the VAX;
 - string round trips, and strings that must be refused;
 - runs under `-O2` and `-OC` on Linux, on the BSD VMs, and on the VAX
-  once the VAX port exists.
+  once the VAX port exists. The VMs are cymoril, artos and alerik, as in
+  Peaseblossom's `AGENTS.md`. Copy the tree to a fresh
+  `~/podatetime-check` on each (`git archive HEAD | ssh host tar -xf -
+  -C ~/podatetime-check`) and run `gmake -k check` there.
 
 Report test results as they are. If something was not run on a target,
 say so.

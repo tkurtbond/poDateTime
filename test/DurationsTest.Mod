@@ -12,6 +12,10 @@ MODULE DurationsTest;
     r: D.Duration;
     negative: BOOLEAN;
     days, hours, minutes, seconds, nanoseconds: LONGINT;
+    (* a LONGREAL result is compared once stored here: on i386 it comes
+       back in an x87 register with 80 bits, and is rounded to 64 only
+       when stored *)
+    stored: LONGREAL;
 
   PROCEDURE Constants;
   BEGIN
@@ -119,7 +123,7 @@ MODULE DurationsTest;
   BEGIN
     T.True("ToSeconds", D.ToSeconds(1500 * D.millisecond) = 1.5D0);
     T.True("ToSeconds -", D.ToSeconds(-1500 * D.millisecond) = -1.5D0);
-    T.True("ToSeconds max", D.ToSeconds(max) = 9223372036.854775807D0);
+    stored := D.ToSeconds(max);  T.True("ToSeconds max", stored = 9223372036.854775807D0);
     T.Int("FromSeconds", D.FromSeconds(1.5D0), 1500 * D.millisecond);
     T.Int("FromSeconds -", D.FromSeconds(-1.5D0), -1500 * D.millisecond);
     T.Int("FromSeconds round", D.FromSeconds(0.0000000005D0), 1);
