@@ -792,8 +792,8 @@ called:
   zone database.
   - If the logical name `TZ` translates to a POSIX rule, `Local()` is
     `Posix` of it.
-  - Otherwise, if `SYS$TIMEZONE_DIFFERENTIAL` is defined, `Local()` is
-    `Fixed` of it (whether it exists on 5.5-2 is open question Q7).
+  - VMS 5.5-2 has no logical name for the offset from UTC.
+    `SYS$TIMEZONE_DIFFERENTIAL` is not defined there (Q7).
   - Otherwise `Local()` is `Fixed(0)`, named `"VMS"`, and `Clocks.Now`
     is then really local time, not UTC. The module's comment must say
     so.
@@ -832,10 +832,13 @@ END Clocks.
   - `Now` is `SYS$GETTIM` (100 ns units counted from 1858-11-17,
     local), converted to UTC with the offset of the local zone. The
     clock ticks every 10 ms.
-  - `Monotonic` is `SYS$GETTIM` made non-decreasing within the process.
-    It never returns less than its last result. *It is not a true
-    monotonic clock*: it jumps forward when the operator sets the clock
-    forward. Q8 asks whether there is something better.
+  - `Monotonic` is `EXE$GL_ABSTIM_TICS`, the 10 ms ticks since boot,
+    read from user mode through `SYS.STB` and widened past its 497-day
+    wrap within the process (Q8). Setting the clock does not change it.
+    A `SYS$GETTIM` made non-decreasing would be no substitute. It jumps
+    forward when the operator sets the clock forward, and stands still
+    when the clock is set back, which VMS 5.5 sites do each autumn for
+    daylight saving time. This needs poc 0.10.0's external variables.
   - `ProcessTime` is `$GETJPI` `JPI$_CPUTIM`, in 10 ms units.
   - `Sleep` is `Platform.Delay`, rounded up to milliseconds.
 
@@ -1133,10 +1136,83 @@ Each step is reviewed before the next one starts.
 - **Q7.** Does VAX/VMS 5.5-2 define `SYS$TIMEZONE_DIFFERENTIAL`, or did
   it arrive with DECdts or OpenVMS 6? This has to be checked against the
   5.5-2 manuals. If it is absent, only the `TZ` logical and `Fixed(0)`
-  remain.
+  remain. *Checked 2026-10-28 on the VAX guest (VMS V5.5-2H4, the
+  `claude` account), and found absent:*
+  - *`F$TRNLNM` and `SHOW LOGICAL` find no `SYS$TIMEZONE_DIFFERENTIAL`.*
+  - *`SHOW LOGICAL/TABLE=*` finds no name containing `TIMEZONE`, `TDF`,
+    `DTSS`, `UTC` or `TZ`, except `ST_TIMEZONE` = `"EDT"` in
+    `LNM$SYSTEM_TABLE`. That comes from the LBL Software Tools installed
+    on this VAX, not from VMS. It is a zone abbreviation, not an offset,
+    and is not used.*
+  - *`SYS$MANAGER`, `SYS$STARTUP` and `SYS$SYSTEM` have no `UTC`,
+    `TDF`, `TIMEZONE` or `DTSS` files.*
+  - *The system help library, `HELPLIB.HLB`, never mentions `TIMEZONE`
+    or a time differential.*
+  
+  *So `Local()` on VMS is the `TZ` logical's rule, or else `Fixed(0)`
+  (§8.3). The printed 5.5-2 manuals have not been searched. The
+  evidence is the 5.5-2 system and its own help library.*
 - **Q8.** On VMS, is there a non-decreasing clock better than a clamped
   `SYS$GETTIM`, such as `EXE$GL_ABSTIM_TICS` through `SYS.STB`, that an
-  unprivileged program can read?
+  unprivileged program can read? *Decided 2026-10-28: yes. `Monotonic`
+  on VMS reads `EXE$GL_ABSTIM_TICS`, as proposed below. It is to be
+  implemented once poc 0.10.0, which allows external variables, is
+  installed. The research:*
+  - *Why the clamp is poor.* `$SETIME` (`SET TIME`) needs OPER and
+    LOG_IO. *Introduction to VMS 5.5 System Services* §10.8 gives
+    "changes between standard time and daylight savings time" as a
+    reason to call it. So on 5.5 a clamped `SYS$GETTIM` stands still for
+    an hour every autumn.
+  - *What 5.5 offers.* The *VMS 5.5 System Services Reference Manual*
+    has `$GETTIM` with one argument, updated every 10 ms, and
+    `SYI$_BOOTTIME`, which is a time of day and so is no better. The 5.5
+    *New Features* manual and the 5.5 and 5.5-2 release notes add
+    nothing on clocks. `LIB$STAT_TIMER`'s elapsed time (*LIB$ manual*,
+    5.0, Table 2-10) is a system-time difference, so it is no better.
+  - *Newer VMS* (VSI's *System Services Reference Manual*, as on
+    docs.vmssoftware.com). `$GETTIM` has a `flags` argument there, and
+    `flags` = 1 gives 100 ns units since boot that `$SETIME` does not
+    change. The argument is passed "by value (Alpha and Integrity
+    servers)" only. `$GETTIM_PREC` and `$GETUTC` are newer too. None of
+    these is in the 5.5 manuals, so none can be used.
+  - *The cell* (*VMS Internals and Data Structures*, 5.2):
+    - §11.3.2: `EXE$GL_ABSTIM_TICS` counts 10 ms ticks since boot. The
+      interval-timer interrupt increments it, and it is "never
+      adjusted". `$SETIME` adjusts `EXE$GQ_SYSTIME` only.
+    - App. C.1.3: it is defined in `SYSTEM_DATA_CELLS`, in the base
+      image `SYS.EXE`. Table F.2 gives the base image's pages UR and
+      URKW, so user mode can read it.
+    - §29.6: an image linked with `SYS.STB` records the version of each
+      executive category it uses. If a category's major ID differs from
+      the running system's, activation fails with `SS$_SYSVERDIF`
+      (5.2 on).
+  - *Checked on the VAX guest* (V5.5-2H4, the `claude` account): a
+    MACRO-32 program linked with `SYS$SYSTEM:SYS.STB/SELECTIVE_SEARCH`
+    read the cell in user mode with no privileges. It read 699926 and
+    then, one second later, 700026. Its image depends only on
+    `SYS$K_STABLE` (1.80), so it needs relinking only if that
+    category's major ID changes.
+  - *In poc 0.9.0*, `VAR ["VMS", …]` and `VAR ["C", …]` are refused for
+    `vax-dec-vms`, so there is no external variable. A
+    `PROCEDURE ["VMS", "EXE$GL_ABSTIM_TICS"]` declaration does work:
+    `SYSTEM.VAL(SYSTEM.ADDRESS, P)` is compiled as
+    `MOVAB G^EXE$GL_ABSTIM_TICS`, and `SYSTEM.GET` then reads the cell.
+    This was checked with `-emit-macro32` only, not built or run. It is
+    not used: the implementation waits for poc 0.10.0, which declares
+    the cell as an external variable.
+  - *The proposal.* `Monotonic` on VMS reads `EXE$GL_ABSTIM_TICS` and
+    multiplies by 10 ms. The cell is an unsigned longword, so it wraps
+    after about 497 days, and `TimePlatform` keeps a wrap count. That
+    holds if the process calls `Monotonic` at least once every 497
+    days. `MonotonicResolution` is 10 ms. The clamped `SYS$GETTIM`
+    remains the fallback.
+  - *To check when it is implemented:*
+    - whether poc can link a program with `SYS.STB`, for example
+      through `-link` or a library's manifest, and so whether every
+      program that imports `Clocks` will be linked with it;
+    - whether tying `Clocks` to `SYS.STB` is acceptable. A program built
+      on 5.5-2 may refuse to start on a VMS whose `STABLE` category has
+      a different major ID.
 - **Q9.** Should `VmsInstants` (section 11) be in the first VAX
   version? *Decided 2026-10-28: yes. Its interface is in §11.1.*
 - **Q10.** Should the patterns also take VMS's `LIB$FORMAT_DATE_TIME`

@@ -21,6 +21,8 @@ record the decision in the design document.
 - **Use the installed `poc`**: `/usr/bin/poc`, version 0.9.0 when this
   file was written. Its libraries are in `/usr/lib/poc`. Check what the
   compiler accepts by running it, not by reading its source.
+  `Monotonic` on VMS waits for poc 0.10.0, which allows external
+  variables (design Q8).
 - **`~/Repos/Oberon/Peaseblossom` is reference only.** Read its
   `doc/users-guide.md`, its runtime (`rtl/`) and its `AGENTS.md` for
   conventions, but never modify, build or commit anything there.
@@ -76,8 +78,14 @@ Peaseblossom's `doc/research/` surveys.
 
 - **Facts about VMS come only from the VAX/VMS 5.5-2 manuals**, or the
   nearest earlier 5.x release if 5.5-2 does not cover the point. Do not
-  rely on OpenVMS 6 or later, or on memory. Mark anything not yet
-  checked as open, as the design's Q7 and Q8 are.
+  rely on OpenVMS 6 or later, or on memory. Newer manuals may point to
+  a facility, but check that it is in the 5.5 manuals before using it.
+  Mark anything not yet checked as open.
+- **The `claude` account** on the VAX guest may be used for checks. Its
+  password is in `~/.netrc-claude-vax`, under the same rules: never
+  printed, recorded or put on a command line. Peaseblossom's
+  `tools/vax-do` reads it with `VAX_NETRC=~/.netrc-claude-vax
+  VAX_USER=claude`.
 - **The VAX account passwords are in `~/.netrc-poc-vax`. Never print
   them**, never echo them, and never put them in a file, a command line
   that is logged, or a commit.
