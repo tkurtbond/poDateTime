@@ -12,7 +12,7 @@ BUILD := build
 SRCS := src/llvm/TimePlatform.Mod $(wildcard src/*.Mod)
 C_SRCS := src/llvm/TimePlatform.c
 TEST_SRCS := test/TimeTests.Mod $(wildcard test/data/*.Mod) $(shell find test/data/zoneinfo -type f)
-TESTS := DurationsTest InstantsTest CalendarTest ClocksTest TimeStringsTest TimeZonesTest
+TESTS := DurationsTest InstantsTest CalendarTest ClocksTest TimeStringsTest TimeZonesTest PatternsTest
 IMPORTS := -import-path src -import-path src/llvm -import-path test -import-path test/data
 ZONEINFO := $(CURDIR)/test/data/zoneinfo
 
@@ -51,6 +51,7 @@ data:
 	python3 -I tools/instants-data.py > test/data/InstantsData.Mod
 	python3 -I tools/strings-data.py > test/data/StringsData.Mod
 	python3 -I tools/zones-data.py > test/data/ZonesData.Mod
+	python3 -I tools/patterns-data.py > test/data/PatternsData.Mod
 
 # the TZif files the zone tables are made from, from the system's tzdata.zi
 zone-files:

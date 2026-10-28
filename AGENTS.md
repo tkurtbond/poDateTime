@@ -25,7 +25,9 @@ reviewed; `TimePlatform`'s zone procedures come with step 4. Step 3
 (`TimeStrings`, fixed formats) is done and reviewed; Q15 and Q16 were
 decided during it. Step 4 (`TimeZones`, and `TimePlatform`'s zone
 procedures for LLVM) is done and reviewed; Q17 was decided during it.
-Step 5 is next. Steps 1-4 pass under both models on Linux and on the
+Step 5 (`TimeStrings`, patterns) is done and reviewed; Q18-Q21 were
+decided during it. Step 6 (the VAX port) is next. Steps 1-5 pass under
+both models on Linux and on the
 local BSD VMs (cymoril, OpenBSD i386; artos, NetBSD amd64; alerik,
 FreeBSD amd64), not yet on the VAX.
 

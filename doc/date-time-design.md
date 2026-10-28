@@ -1011,6 +1011,16 @@ where the C directives are not enough:
 
 **Rules:**
 
+- **`%Y` writes at least four digits**, after a `-` for a negative
+  year: `0044`, `-0044`, as `Date` writes them (Q18). `%C`, `%y`, `%G`
+  and `%g` are floored: -44 gives `-1`, `56`.
+- **`%z` and `%:z` write an offset's seconds when it has them**,
+  `-002521` and `-00:25:21`, as Python does (Q21). `Parse`'s `%z`
+  takes `Z`, `±hh`, `±hhmm`, `±hhmmss` and the forms with colons.
+- **Flags** (`-`, `_`, `0`, `^`) come before any directive; `^` is
+  the only one that changes a name or `%c`. A width is taken only by
+  `%N` (1..9 digits), colons only by `%z`. `Parse` reads the flags and
+  ignores them, except that `_` lets a number start with spaces.
 - **Names are English only.** There is no locale (lesson 10).
 - **An unknown directive** is written as it stands by `Format`, as glibc
   does, and makes `Parse` return `FALSE`.
@@ -1021,13 +1031,27 @@ where the C directives are not enough:
   - a blank in the pattern matches any run of blanks, as `strptime`'s
     does.
 - **`Parse` fills only what the text gives** and records what it filled
-  in `given`. Every other field is 1970-01-01T00:00:00, offset 0.
+  in `given`. Every other field is 2000-01-01T00:00:00, offset 0; 2000
+  is a leap year, so a month and day without a year, such as syslog's
+  `Feb 29`, can always be read (Q20).
   - Like Ruby's `_strptime`, this lets the program decide what a missing
     field means. C's `strptime` instead leaves missing fields as they
     were, and Python defaults them to 1900.
-  - `%s` sets every field.
-  - `%G`/`%V`/`%u` together set the date.
-  - A day of the week that disagrees with the date fails.
+  - `%Z` takes an offset only from a name with one meaning: `UTC`,
+    `UT`, `GMT` or `Z` gives 0, and `+0530` or `-03` its own. Any other
+    name is read and skipped (Q19).
+  - `%s` sets every field, and overrides any other date or time.
+  - `%G`/`%V`/`%u` together set the date; without `%u` it is the
+    week's Monday. `%j` with a year sets the month and day. Either
+    marks the year, month and day as given.
+  - `%I` or `%l` with `%p` sets the hour, which must agree with `%H`.
+  - `%z` and an offset from `%Z` must agree.
+  - A second of 60 is read only with an offset, and only where UTC is
+    at 23:59:60 on a month's last day, as `ReadOffsetDateTime` reads
+    it (section 6.2).
+  - A day of the week, `%V`, `%U` or `%W` that disagrees with the date
+    fails, when the text gives the whole date; without it the date is
+    not the text's to check. `%U` and `%W` are only checked.
   - `%y` reads 69-99 as 19xx and 00-68 as 20xx, POSIX's pivot.
 
 ## 11. `TimePlatform`, the per-target module
@@ -1365,3 +1389,50 @@ Each step is reviewed before the next one starts.
   for facts all versions agree on. Reading it with tables limited to
   agreed years would break at the next tzdata release; making the
   tables at test time needs Python, which NetBSD and the VAX lack.*
+- **Q18.** How does `%Y` write years before 1000 and negative years?
+  Found during step 5: glibc writes year 44 as `44` and -44 as `-44`,
+  Ruby as `0044` and `-0044`. *Decided 2026-10-28: at least four
+  digits, after a `-` for a negative year, as Ruby and ISO 8601's
+  expanded form write them, so that `%F` gives what `Date` gives and
+  `Parse` can read `%Y%m%d`; `%-Y` gives glibc's form. `Parse` reads
+  up to four digits after an optional `-`. `%C`, like every number
+  but `%Y` and `%G`, counts its sign toward its two places, as glibc
+  and Ruby write it, so `%C%y` reads `-156` back as -44, but `%C`
+  alone reads only -9..99.
+  `%C`, `%y`, `%G` and `%g` are floored, as both write them. The
+  comparison with `strftime` covers `%Y`, `%F`, `%G` and `%c` for the
+  years 1000..9999 only.*
+- **Q19.** What does `Parse` do with `%Z`? Found during step 5: an
+  abbreviation does not always name one offset (`IST` is India, Israel
+  or Ireland). glibc skips it, Ruby looks it up in a table, Python takes
+  `UTC`, `GMT` and the local zone's names only. *Decided 2026-10-28:
+  `%Z` reads letters, or a sign and digits, at most 15 characters.
+  `UTC`, `UT`, `GMT` and `Z`, in either case, give offset 0, and a
+  numeric abbreviation such as `+0530` or `-03` its own offset; both set
+  `offsetGiven`. Any other name is read and skipped, as glibc does.
+  Ruby's table would give a wrong offset silently for an ambiguous name;
+  refusing `%Z` would leave `Format`'s output unreadable by its own
+  pattern.*
+- **Q20.** What does `Parse` do when the text gives no year? Found
+  during step 5: with 1970 for a missing year, `02-29` read by `%m-%d`
+  is refused, as Python's 1900 refuses it (cpython issue 70647), and
+  `Mon 10-28` read by `%a %m-%d` fails, since 1970-10-28 was a
+  Wednesday. *Decided 2026-10-28: a missing year is 2000, a leap year,
+  so that every month and day that exists in some year is read; the
+  other fields not given stay -01-01T00:00:00, offset 0. A weekday,
+  `%V`, `%U` and `%W` are checked against the date only when the text
+  gives all of it: a year, month and day, a year and `%j`, or a week
+  date. Keeping
+  1970 leaves syslog's `Feb 29` unreadable; 1972 for February 29 alone
+  makes the default depend on the text; Ruby's current year makes
+  `Parse` depend on the clock.*
+- **Q21.** How do `%z` and `%:z` write an offset with seconds? Found
+  during step 5: glibc, GNU `date` and Ruby drop the seconds, writing
+  Dublin's -00:25:21 as `-0025` and `-00:25`, and keep them only in
+  `%::z`; Python writes `-002521` and `-00:25:21`. *Decided 2026-10-28:
+  the seconds are written when they are nonzero, as Python writes them
+  and as Q15 decided for the fixed formats, so that `Format` never
+  writes an instant it does not hold and `Parse` reads it back. `%::z`
+  always writes them. Such offsets are historical only; the comparison
+  with `strftime` leaves them out. `Parse`'s `%z` reads `Z`, `±hh`,
+  `±hhmm`, `±hhmmss`, `±hh:mm` and `±hh:mm:ss`.*
