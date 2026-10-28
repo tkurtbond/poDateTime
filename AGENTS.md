@@ -22,8 +22,9 @@ there.
 their tests) is done and reviewed. Q11-Q14 were decided
 during it. Step 2 (`TimePlatform` for LLVM, and `Clocks`) is done and
 reviewed; `TimePlatform`'s zone procedures come with step 4. Step 3
-(`TimeStrings`, fixed formats) is next. Steps 1 and 2 have been tested
-on Linux only, not on the BSDs or the VAX.
+(`TimeStrings`, fixed formats) is written and awaits review; Q15 and
+Q16 were decided during it. Steps 1-3 have been tested on Linux only,
+not on the BSDs or the VAX.
 
 ## The compiler
 
@@ -32,6 +33,10 @@ on Linux only, not on the BSDs or the VAX.
   compiler accepts by running it, not by reading its source.
   0.10.0 allows external variables, which `Monotonic` on VMS needs
   (design Q8).
+- **Under `-OC`, `SHORT` of a `HUGEINT` gives a 32-bit `INTEGER`**, not
+  the 64-bit `LONGINT`, and cuts the value without a word; a `HUGEINT`
+  cannot be assigned to a `LONGINT` at all. Use `SHORT` only for values
+  that fit in 32 bits, and `TimeStrings.Long`'s pieces otherwise.
 - **Building and testing:** `make` builds the library under both size
   models in `build/`; `make check` runs the tests under both.
 - **`~/Repos/Oberon/Peaseblossom` is reference only.** Read its

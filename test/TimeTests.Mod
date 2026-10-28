@@ -36,6 +36,15 @@ MODULE TimeTests;
     END
   END Int;
 
+  PROCEDURE Str*(label, got, expected: ARRAY OF CHAR);
+  BEGIN
+    INC(checks);
+    IF got # expected THEN
+      Fail(label);  Out.String(': got "');  Out.String(got);
+      Out.String('", expected "');  Out.String(expected);  Out.Char('"');  Out.Ln
+    END
+  END Str;
+
   (* for checks run in a loop, counted as one *)
   PROCEDURE Count*(n: LONGINT);
   BEGIN

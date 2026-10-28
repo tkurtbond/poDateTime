@@ -694,7 +694,7 @@ END Calendar.
   hours of the years past the instants, as -9999-01-01T00:00+01:00 is
   an hour before `Instants.earliest`. It then saturates at `earliest`
   or `latest`; `CheckedToInstant` returns `FALSE` instead, and is what
-  `TimeZones.ToInstant`, `Resolve` and `Format.ReadInstant` use.
+  `TimeZones.ToInstant`, `Resolve` and `TimeStrings.ReadInstant` use.
   See [offset-to-instant.md](offset-to-instant.md) (Q13).
 
 ### 7.4 Elapsed arithmetic on civil date-times
@@ -884,7 +884,7 @@ END Clocks.
 
 ```oberon
 MODULE TimeStrings;
-  IMPORT Durations, Instants, Calendar, TimeZones;
+  IMPORT Durations, Instants, Calendar;   (* and TimeZones, for FormatIn (10.2) *)
   CONST shortest* = -1;   (* digits: 0, 3, 6 or 9 fractional digits, the fewest that are exact *)
 
   (* output: appended at s's first 0X, as OutStr does *)
@@ -909,13 +909,24 @@ MODULE TimeStrings;
 
 **Output:**
 
-- **Years outside `0000 .. 9999`** are written in ISO 8601's expanded
-  form, `+10000` and `-0044`, by agreement as the standard requires.
-  RFC 3339 allows only `0000 .. 9999`; a program that must produce
-  RFC 3339 keeps to that range.
+- **Years before `0000`** are written in ISO 8601's expanded form,
+  `-0044`, a sign and four digits, by agreement as the standard
+  requires. RFC 3339 allows only `0000 .. 9999`; a program that must
+  produce RFC 3339 keeps to that range. `Calendar.maxYear` is 9999, so
+  no `+` year is written.
+- **A fraction is cut, not rounded**, so that `23:59:59.9999` with 3
+  digits stays in its second, its minute and its day.
+- **`shortest`** writes 0, 3, 6 or 9 digits for the date-times, as
+  Java's `LocalTime.toString` does, but `Duration` strips every
+  trailing zero (`PT0.5S`), as Java's `Duration.toString` does.
+- **An offset** is `Z` for 0, `±hh:mm` otherwise, and `±hh:mm:ss`
+  when it has seconds, as Python writes it (Q15).
 - **`Duration` writes hours, minutes and seconds only**: 26 hours is
   `PT26H`, never `P1DT2H`, because a `Duration`'s day is not a calendar
   day. Java's `Duration.toString` does the same.
+- **`Period`** writes a leading `-` when every nonzero field is
+  negative (`-P1M`), and a `-` on each negative field when the signs
+  are mixed (`P1Y-2M`). Zero is `P0D` (Q16).
 - **`Elapsed`** is the clock style, `[-]h:mm:ss[.f]`, with the hours
   unbounded. It avoids Python's `"-1 day, 23:59:59"`.
 
@@ -925,7 +936,20 @@ MODULE TimeStrings;
   profile and ISO 8601's lower-case `t`/`z`. Between the date and the
   time they also take a space, which RFC 3339 allows.
 - They take 1-9 fractional digits, and the offsets `Z`, `±hh:mm` and
-  `±hh`.
+  `±hh`, and `±hh:mm:ss` (Q15), up to 25:59:59. `-00:00` is read as 0.
+- **They are strict**, so that text which is not a time is less likely
+  to be read as one:
+  - nothing is skipped before the text;
+  - the seconds are required (`14:05` is refused), and the fraction
+    takes `.` only, not the comma ISO 8601 also allows;
+  - each field has exactly its width, with a year of four digits after
+    an optional `-`; `+` years and `-0000` are refused;
+  - text followed at once by a digit is refused, so that `+0530` is not
+    read as `+05` and `2026-10-289` is not read as a date. Anything
+    else may follow: `2026-10-28T14:05` read as a date ends before the
+    `T`, and `14:05:09,5` read as a time ends before the comma.
+  - `ReadDuration` and `ReadPeriod` take the designators in upper case
+    only.
 - **`ReadInstant` refuses** a time whose instant falls outside
   `Instants.earliest .. latest`, such as `-9999-01-01T00:00:00+01:00`.
   It goes through `Calendar.CheckedToInstant` (Q13).
@@ -946,6 +970,9 @@ MODULE TimeStrings;
   
   It refuses `Y` and `M` before the `T`. Those are calendar units, read
   by `ReadPeriod` (`P1Y2M3W4D`).
+- **`ReadPeriod`** takes a leading `-` and a `-` on any field; a
+  field's `-` after a leading one cancels it, so `-P1Y-2M` is -1 years
+  and +2 months, as Java's `Period.parse` reads it (Q16).
 
 ### 10.2 Patterns
 
@@ -1281,7 +1308,7 @@ Each step is reviewed before the next one starts.
   converse of Q12. *Decided 2026-10-28: `ToInstant` saturates at
   `Instants.earliest` or `latest`; a new `CheckedToInstant` returns
   `FALSE`, and `TimeZones.ToInstant`, `Resolve` and
-  `Format.ReadInstant` use it, so that they refuse such times. The
+  `TimeStrings.ReadInstant` use it, so that they refuse such times. The
   options and the reasons are in
   [offset-to-instant.md](offset-to-instant.md).*
 - **Q14.** Which units does `Instants.Truncate` take? Found during step
@@ -1292,3 +1319,22 @@ Each step is reviewed before the next one starts.
   the unit, and are checked against a table from Python's integers. The
   options and the reasons are in
   [instant-truncation.md](instant-truncation.md).*
+- **Q15.** How are offsets with seconds written and read? Found during
+  step 3: `Calendar` allows any offset up to ±25:59:59, and tzdb's local
+  mean times have seconds (Amsterdam +00:19:32 until 1937), but RFC 3339
+  and ISO 8601 have no seconds in an offset. *Decided 2026-10-28:
+  `±hh:mm:ss` is written when the seconds are nonzero and read, as
+  Python does, so that every `OffsetDateTime` is written exactly and
+  read back. Such a string is not RFC 3339, but it arises only for
+  historical zones, and every RFC 3339 string is still read. Rounding
+  the offset would name a different instant; writing UTC would lose
+  the local time.*
+- **Q16.** How are periods with mixed signs written? Found during step
+  3: a `Calendar.Period`'s fields each have their own sign, and ISO
+  8601 has no negative periods. *Decided 2026-10-28: a leading `-` when
+  every nonzero field is negative, as `Duration` writes `-PT0.5S` and
+  ISO 8601-2 writes negatives; a `-` on each negative field otherwise,
+  as Java writes them all. The reader takes both, and Java's output, so
+  every `Period` is written and read back. Java's per-field signs
+  throughout read less naturally; refusing mixed signs would leave
+  valid `Period`s that cannot be written.*

@@ -12,7 +12,7 @@ BUILD := build
 SRCS := src/llvm/TimePlatform.Mod $(wildcard src/*.Mod)
 C_SRCS := src/llvm/TimePlatform.c
 TEST_SRCS := test/TimeTests.Mod $(wildcard test/data/*.Mod)
-TESTS := DurationsTest InstantsTest CalendarTest ClocksTest
+TESTS := DurationsTest InstantsTest CalendarTest ClocksTest TimeStringsTest
 IMPORTS := -import-path src -import-path src/llvm -import-path test -import-path test/data
 
 .PHONY: all check check-o2 check-oc clean data
@@ -44,6 +44,7 @@ $(BUILD)/%.passed: $(SRCS) $(C_SRCS) $(TEST_SRCS) test/$$(notdir $$*).Mod test/$
 data:
 	python3 -I tools/calendar-data.py > test/data/CalendarData.Mod
 	python3 -I tools/instants-data.py > test/data/InstantsData.Mod
+	python3 -I tools/strings-data.py > test/data/StringsData.Mod
 
 clean:
 	rm -rf $(BUILD)
