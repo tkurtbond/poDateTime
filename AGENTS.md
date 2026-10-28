@@ -9,12 +9,19 @@ and time zones, built with the Peaseblossom Oberon Compiler (`poc`). It
 provides clocks, instants, civil dates and times, durations, calendar
 periods, time zones, and conversion to and from strings.
 
-**The current state is design only.** The design is
-`doc/date-time-design.md`, which includes a survey of Ada, Modula-3,
-Python, Ruby, C and C++. Read it before writing code. Its section 12.4
-gives the order of work, and its section 13 lists the open questions.
-Do not settle an open question silently. Raise it with the user, then
-record the decision in the design document.
+The design is `doc/date-time-design.md`, which includes a survey of
+Ada, Modula-3, Python, Ruby, C and C++. Read it before writing code.
+Its section 12.4 gives the order of work, in six steps, each reviewed
+before the next starts. Its section 13 lists the questions for review
+and their decisions. Do not settle an open question silently. Raise it
+with the user, then record the decision in section 13; a decision that
+needs its reasons kept gets a note of its own in `doc/`, linked from
+there.
+
+**The current state:** step 1 (`Durations`, `Instants`, `Calendar` and
+their tests) is done and reviewed. Q11-Q14 were decided
+during it. Step 2 (`TimePlatform` for LLVM, and `Clocks`) is next. It
+has been tested on Linux only, not on the BSDs or the VAX.
 
 ## The compiler
 
