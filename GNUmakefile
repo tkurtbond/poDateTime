@@ -2,22 +2,25 @@
 #
 # `make` builds the library podatetime under both size models in build/;
 # `make check` builds each test program under both and compares its output
-# with test/<Test>.expected. install and vax come with steps 2 and 6 of
-# design 12.4.
+# with test/<Test>.expected. vax comes with step 6 of design 12.4.
+# install is left for later: poc -install-library writes into poc's own
+# library directory, which needs root.
 
 POC ?= poc
 BUILD := build
-SRCS := $(wildcard src/*.Mod)
+# a dependency only: poc compiles TimePlatform.c beside TimePlatform.Mod itself
+SRCS := src/llvm/TimePlatform.Mod $(wildcard src/*.Mod)
+C_SRCS := src/llvm/TimePlatform.c
 TEST_SRCS := test/TimeTests.Mod $(wildcard test/data/*.Mod)
-TESTS := DurationsTest InstantsTest CalendarTest
-IMPORTS := -import-path src -import-path test -import-path test/data
+TESTS := DurationsTest InstantsTest CalendarTest ClocksTest
+IMPORTS := -import-path src -import-path src/llvm -import-path test -import-path test/data
 
 .PHONY: all check check-o2 check-oc clean data
 .SECONDEXPANSION:
 
 all: $(BUILD)/O2/stamp $(BUILD)/OC/stamp
 
-$(BUILD)/%/stamp: $(SRCS)
+$(BUILD)/%/stamp: $(SRCS) $(C_SRCS)
 	mkdir -p $(BUILD)/$*
 	$(POC) -$* -output-dir $(BUILD)/$* -library podatetime $(SRCS)
 	touch $@
@@ -28,7 +31,7 @@ check-o2: $(TESTS:%=$(BUILD)/O2/%.passed)
 check-oc: $(TESTS:%=$(BUILD)/OC/%.passed)
 
 # $* is <model>/<Test>
-$(BUILD)/%.passed: $(SRCS) $(TEST_SRCS) test/$$(notdir $$*).Mod test/$$(notdir $$*).expected
+$(BUILD)/%.passed: $(SRCS) $(C_SRCS) $(TEST_SRCS) test/$$(notdir $$*).Mod test/$$(notdir $$*).expected
 	mkdir -p $(BUILD)/$(dir $*)
 	$(POC) -$(patsubst %/,%,$(dir $*)) -output-dir $(BUILD)/$(dir $*) $(IMPORTS) \
 	  -o $(BUILD)/$* test/$(notdir $*).Mod

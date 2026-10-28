@@ -20,8 +20,9 @@ there.
 
 **The current state:** step 1 (`Durations`, `Instants`, `Calendar` and
 their tests) is done and reviewed. Q11-Q14 were decided
-during it. Step 2 (`TimePlatform` for LLVM, and `Clocks`) is next. It
-has been tested on Linux only, not on the BSDs or the VAX.
+during it. Step 2 (`TimePlatform` for LLVM, and `Clocks`) is done and
+awaiting review; `TimePlatform`'s zone procedures come with step 4.
+Both have been tested on Linux only, not on the BSDs or the VAX.
 
 ## The compiler
 
