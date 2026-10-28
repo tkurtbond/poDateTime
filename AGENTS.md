@@ -18,11 +18,13 @@ record the decision in the design document.
 
 ## The compiler
 
-- **Use the installed `poc`**: `/usr/bin/poc`, version 0.9.0 when this
-  file was written. Its libraries are in `/usr/lib/poc`. Check what the
+- **Use the installed `poc`**: `/usr/bin/poc`, version 0.10.0 (d849a15)
+  since 2026-10-28. Its libraries are in `/usr/lib/poc`. Check what the
   compiler accepts by running it, not by reading its source.
-  `Monotonic` on VMS waits for poc 0.10.0, which allows external
-  variables (design Q8).
+  0.10.0 allows external variables, which `Monotonic` on VMS needs
+  (design Q8).
+- **Building and testing:** `make` builds the library under both size
+  models in `build/`; `make check` runs the tests under both.
 - **`~/Repos/Oberon/Peaseblossom` is reference only.** Read its
   `doc/users-guide.md`, its runtime (`rtl/`) and its `AGENTS.md` for
   conventions, but never modify, build or commit anything there.

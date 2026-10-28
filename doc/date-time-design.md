@@ -503,7 +503,7 @@ MODULE Instants;
   PROCEDURE Compare*(a, b: Instant): INTEGER;           (* -1, 0, 1 *)
   PROCEDURE Equal*(a, b: Instant): BOOLEAN;
   PROCEDURE Before*(a, b: Instant): BOOLEAN;
-  PROCEDURE Truncate*(VAR r: Instant; t: Instant; unit: Durations.Duration);   (* down to a multiple of unit since 1970 *)
+  PROCEDURE Truncate*(VAR r: Instant; t: Instant; unit: Durations.Duration);   (* down to a multiple of any unit since 1970 *)
 END Instants.
 ```
 
@@ -523,8 +523,9 @@ END Instants.
   instant converts to a date and can be written in ISO 8601's four-digit
   (or signed, expanded) years. The record itself could reach much
   further; the limit is the same as `Calendar`'s years, so that
-  `FromInstant`, `FromUTCInstant` and `TimeZones.ToLocal` need no
-  failure result (Q2, decided 2026-10-28).
+  `FromUTCInstant` and `ToUTCInstant` need no failure result (Q2,
+  decided 2026-10-28). At an offset, the first and last 26 hours of the
+  years saturate, with checked forms beside (Q12, Q13).
 
 ### 6.2 Leap seconds
 
@@ -547,6 +548,17 @@ the last nanosecond of the minute before (section 10.1). See Q5 and
 | How many days between two dates? | `Calendar.DaysBetween(a, b)` |
 | How many years, months and days old? | `Calendar.PeriodBetween(p, birth, today)` |
 | Elapsed time on a stopwatch? | `Clocks.Monotonic()` twice, then subtract |
+
+### 6.4 Truncating
+
+`Truncate` takes any positive unit. An instant in nanoseconds needs 69
+bits, so a unit that neither divides a second nor is whole seconds,
+such as 7 ms or 1.5 s, has its remainder found from the two fields,
+multiplying modulo the unit. The multiples count from 1970, so
+`Durations.day` gives midnight UTC and `Durations.week` gives
+Thursdays; days and weeks in a zone, or ISO weeks, go through
+`Calendar` and `TimeZones`. See
+[instant-truncation.md](instant-truncation.md) (Q14).
 
 ## 7. `Calendar`
 
@@ -627,10 +639,10 @@ MODULE Calendar;
   PROCEDURE AddDays*(VAR d: Date; n: HUGEINT): BOOLEAN;
   PROCEDURE AddMonths*(VAR d: Date; n: HUGEINT): BOOLEAN;    (* clamped: Jan 31 + 1 = Feb 28/29 *)
   PROCEDURE AddYears*(VAR d: Date; n: HUGEINT): BOOLEAN;     (* clamped: Feb 29 + 1 = Feb 28 *)
-  PROCEDURE AddPeriod*(VAR d: Date; p: Period): BOOLEAN;     (* years, then months, then days *)
+  PROCEDURE AddPeriod*(VAR d: Date; p: Period): BOOLEAN;     (* years and months together, then days *)
   PROCEDURE SubtractPeriod*(VAR d: Date; p: Period): BOOLEAN;
   PROCEDURE DaysBetween*(later, earlier: Date): HUGEINT;
-  PROCEDURE PeriodBetween*(VAR p: Period; from, to: Date);   (* Java's Period.between: AddPeriod(from, p) = to *)
+  PROCEDURE PeriodBetween*(VAR p: Period; from, to: Date);   (* dateutil's relativedelta: AddPeriod(from, p) = to *)
   PROCEDURE CompareDates*(a, b: Date): INTEGER;
   PROCEDURE CompareDateTimes*(a, b: DateTime): INTEGER;      (* by the fields, not by an instant *)
 
@@ -640,8 +652,10 @@ MODULE Calendar;
   PROCEDURE CheckedDifference*(VAR d: Durations.Duration; later, earlier: DateTime): BOOLEAN;
 
   (* civil <-> instant at a known offset; no zone rules are involved *)
-  PROCEDURE ToInstant*(odt: OffsetDateTime; VAR t: Instants.Instant);
-  PROCEDURE FromInstant*(VAR odt: OffsetDateTime; t: Instants.Instant; offset: LONGINT);
+  PROCEDURE ToInstant*(odt: OffsetDateTime; VAR t: Instants.Instant);   (* saturating *)
+  PROCEDURE CheckedToInstant*(VAR t: Instants.Instant; odt: OffsetDateTime): BOOLEAN;
+  PROCEDURE FromInstant*(VAR odt: OffsetDateTime; t: Instants.Instant; offset: LONGINT);   (* saturating *)
+  PROCEDURE CheckedFromInstant*(VAR odt: OffsetDateTime; t: Instants.Instant; offset: LONGINT): BOOLEAN;
   PROCEDURE ToUTCInstant*(dt: DateTime; VAR t: Instants.Instant);         (* dt read as UTC *)
   PROCEDURE FromUTCInstant*(VAR dt: DateTime; t: Instants.Instant);
 
@@ -662,8 +676,26 @@ END Calendar.
   - `DaysBetween` is a difference of day numbers;
   - `AddDays` is a day number and back.
 - **`AddMonths`** works on `year * 12 + month - 1`, then clamps the day.
-- **`PeriodBetween`** gives a result whose `years`, `months` and `days`
-  all have the same sign.
+- **`AddPeriod`** adds `years * 12 + months` in one step, then the
+  days, as Java's `Period.addTo` does.
+- **`PeriodBetween`** counts whole months, then the days from where those
+  months land, in both directions, as Python's `dateutil.relativedelta`
+  does. Its `years`, `months` and `days` all have the same sign, and
+  `AddPeriod(from, PeriodBetween(from, to)) = to` for every pair of
+  dates. Java's `Period.between` is the same forward but not backward.
+  See [calendar-periods.md](calendar-periods.md) (Q11).
+- **`FromInstant`** can carry an instant within 26 hours of either end
+  out of the years, as `Instants.latest` at +14:00 would be in 10000.
+  It then saturates at the first or last moment of the years and keeps
+  the offset, so the result names a different instant;
+  `CheckedFromInstant` returns `FALSE` instead. See
+  [instant-offsets.md](instant-offsets.md) (Q12).
+- **`ToInstant`** can carry an `OffsetDateTime` in the first or last 26
+  hours of the years past the instants, as -9999-01-01T00:00+01:00 is
+  an hour before `Instants.earliest`. It then saturates at `earliest`
+  or `latest`; `CheckedToInstant` returns `FALSE` instead, and is what
+  `TimeZones.ToInstant`, `Resolve` and `Format.ReadInstant` use.
+  See [offset-to-instant.md](offset-to-instant.md) (Q13).
 
 ### 7.4 Elapsed arithmetic on civil date-times
 
@@ -723,6 +755,10 @@ END TimeZones.
   before and a day after the local time, which is how C++ and Python
   implement it. So an extension gets correct gap and overlap handling
   for free.
+- **`ToInstant` and `Resolve` return `FALSE`** for a local time whose
+  instant would fall outside `Instants.earliest .. latest`. They go
+  through `Calendar.CheckedToInstant`, not the saturating `ToInstant`
+  (Q13).
 - **Zones are on the heap and never change**, so they can be shared and
   kept. `Named` caches each zone it has read, by name.
 
@@ -890,6 +926,9 @@ MODULE TimeStrings;
   time they also take a space, which RFC 3339 allows.
 - They take 1-9 fractional digits, and the offsets `Z`, `±hh:mm` and
   `±hh`.
+- **`ReadInstant` refuses** a time whose instant falls outside
+  `Instants.earliest .. latest`, such as `-9999-01-01T00:00:00+01:00`.
+  It goes through `Calendar.CheckedToInstant` (Q13).
 - **The basic format (`20261028T140509Z`) is not read**, so that a
   malformed string is less likely to be read as something (Q3, decided
   2026-10-28). A program that needs it can use a pattern such as
@@ -1220,3 +1259,36 @@ Each step is reviewed before the next one starts.
   proposal is no: `%` only. *Decided 2026-10-28: no. A VMS program that
   needs VMS's directives uses `LIB$FORMAT_DATE_TIME` directly, through
   `DateTimes.Format`, with `VmsInstants.FromInstant` to get the time.*
+- **Q11.** In what order does `AddPeriod` apply a period's years, months
+  and days, and how does `PeriodBetween` measure one? Found during step
+  1: "years, then months, then days" can clamp the day twice, and Java's
+  backward `Period.between` does not always lead back, so either breaks
+  `AddPeriod(from, PeriodBetween(from, to)) = to`. *Decided 2026-10-28:
+  the years and months go in together, then the days; `PeriodBetween`
+  counts whole months, then takes the days from where they land, in
+  both directions, as `dateutil.relativedelta` does. The options and the
+  reasons are in [calendar-periods.md](calendar-periods.md).*
+- **Q12.** What does `FromInstant` do when the offset carries the civil
+  time outside the years? Found during step 1: the instants cover the
+  years read as UTC, so at an offset the last and first 26 hours of
+  them have no civil time. *Decided 2026-10-28: `FromInstant`
+  saturates at the first or last moment of the years, keeping the
+  offset, as the library's other plain procedures saturate (Q4); a new
+  `CheckedFromInstant` returns `FALSE`. The options and the reasons are
+  in [instant-offsets.md](instant-offsets.md).*
+- **Q13.** What does `ToInstant` do when the offset carries a valid
+  `OffsetDateTime` outside the instants? Found during step 1; the
+  converse of Q12. *Decided 2026-10-28: `ToInstant` saturates at
+  `Instants.earliest` or `latest`; a new `CheckedToInstant` returns
+  `FALSE`, and `TimeZones.ToInstant`, `Resolve` and
+  `Format.ReadInstant` use it, so that they refuse such times. The
+  options and the reasons are in
+  [offset-to-instant.md](offset-to-instant.md).*
+- **Q14.** Which units does `Instants.Truncate` take? Found during step
+  1: an instant in nanoseconds needs 69 bits, and the first version
+  took only units that divide a second or are whole seconds, trapping
+  on 7 ms or 1.5 s. *Decided 2026-10-28: any positive unit; the others
+  have their remainder found from the two fields, multiplying modulo
+  the unit, and are checked against a table from Python's integers. The
+  options and the reasons are in
+  [instant-truncation.md](instant-truncation.md).*
