@@ -6,7 +6,7 @@ poDateTime is a library of Oberon-2 modules for dates, times, durations
 and time zones, built with poc, the
 [Peaseblossom Oberon Compiler](https://github.com/tkurtbond/peaseblossom).
 It runs on Linux, NetBSD, OpenBSD and FreeBSD through poc's LLVM
-backend; a port to VAX/VMS 5.5-2 is in progress.
+backend; a port to VAX/VMS 5.5-2 is the next step.
 
 ## The modules
 
