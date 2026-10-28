@@ -22,9 +22,9 @@ there.
 their tests) is done and reviewed. Q11-Q14 were decided
 during it. Step 2 (`TimePlatform` for LLVM, and `Clocks`) is done and
 reviewed; `TimePlatform`'s zone procedures come with step 4. Step 3
-(`TimeStrings`, fixed formats) is written and awaits review; Q15 and
-Q16 were decided during it. Steps 1-3 have been tested on Linux only,
-not on the BSDs or the VAX.
+(`TimeStrings`, fixed formats) is done and reviewed; Q15 and Q16 were
+decided during it. Step 4 (`TimeZones`) is next. Steps 1-3 have been
+tested on Linux only, not on the BSDs or the VAX.
 
 ## The compiler
 
