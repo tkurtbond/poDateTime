@@ -1212,7 +1212,10 @@ GNUmakefile     all, check, check-o2, check-oc, install, vax
 - **Where they run:** under `-O2` and `-OC` on atla, and on the BSD VMs
   that Peaseblossom's `make check` uses, and on the SIMH VAX. There
   `TimeZonesTest` writes its zone files first and leaves out what VMS
-  does not have (Q24).
+  does not have (Q24). `VmsInstantsTest` (`test/vax/`) runs there only:
+  it checks the VMS epoch against `$BINTIM`, the conversions around
+  New York's gap and overlap with `TZ` set to its rule, the delta
+  times' limits, and `Clocks.Now` against `$GETTIM`.
 
 ### 12.4 Order of work
 

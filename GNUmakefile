@@ -6,11 +6,26 @@
 # for vax-dec-vms under both, as MACRO-32 for VMS to assemble, in
 # build/vax/vax-dec-vms/<model>/, laid out as the kit's [.LIB.POC] is
 # (design 12.2).
-# install is left for later: poc -install-library writes into poc's own
-# library directory, which needs root.
+#
+# `make install` installs podatetime under both models in
+# $(POC_OBERON_LIBRARIES)/podatetime (poc puts each in <triple>/<model>/
+# there), where other repos' poc makefiles find it with -library-path.
+# `make install-vax` adds the VAX's podatetime there, and vmsinstants in
+# $(POC_OBERON_LIBRARIES)/vmsinstants; it is separate because poc's VAX
+# target is packaged on its own on some systems. `make uninstall` removes
+# what they wrote.
 
 POC ?= poc
 BUILD := build
+
+# Each library in its own directory under POC_OBERON_LIBRARIES, so a
+# program names only the libraries it uses.
+POC_OBERON_LIBRARIES ?= /usr/local/sw/versions/oberon/poc/lib
+LIBDIR = $(POC_OBERON_LIBRARIES)/podatetime
+VMS_LIBDIR = $(POC_OBERON_LIBRARIES)/vmsinstants
+LIBMODS := TimePlatform Durations Instants Calendar TimeZones Clocks TimeStrings
+TRIPLE = $(shell $(POC) -version | sed -n 's/^target \([^ ]*\).*/\1/p')
+MODELS := O2 OC
 # a dependency only: poc compiles TimePlatform.c beside TimePlatform.Mod itself
 SRCS := src/llvm/TimePlatform.Mod $(wildcard src/*.Mod)
 C_SRCS := src/llvm/TimePlatform.c
@@ -20,7 +35,7 @@ IMPORTS := -import-path src -import-path src/llvm -import-path test -import-path
   -import-path test/data
 ZONEINFO := $(CURDIR)/test/data/zoneinfo
 
-.PHONY: all check check-o2 check-oc vax clean data zone-files
+.PHONY: all check check-o2 check-oc vax install install-vax uninstall clean data zone-files
 .SECONDEXPANSION:
 
 all: $(BUILD)/O2/stamp $(BUILD)/OC/stamp
@@ -81,6 +96,46 @@ data:
 # the TZif files the zone tables are made from, from the system's tzdata.zi
 zone-files:
 	python3 -I tools/zone-files.py
+
+# Install only a library whose tests pass; the VAX's cannot be run here,
+# so install-vax needs only the build. poc -install-library copies only
+# what a program needs: for LLVM the archive, the shared object, the
+# manifest and each module's .sym and .owner; for the VAX the manifest,
+# the build and setup procedures and each module's .mar, .sym and .owner.
+# A library records the poc that built it, and another poc refuses it:
+# install again after upgrading poc.
+install: all check
+	install -d $(LIBDIR)
+	for m in $(MODELS); do \
+	  $(POC) -$$m -library-path $(BUILD)/$$m -output-dir $(LIBDIR) -install-library podatetime || exit 1; \
+	done
+
+install-vax: vax
+	install -d $(LIBDIR) $(VMS_LIBDIR)
+	for m in $(MODELS); do \
+	  $(POC) -target vax-dec-vms -$$m -library-path $(BUILD)/vax -output-dir $(LIBDIR) \
+	    -install-library podatetime && \
+	  $(POC) -target vax-dec-vms -$$m -library-path $(BUILD)/vax -output-dir $(VMS_LIBDIR) \
+	    -install-library vmsinstants || exit 1; \
+	done
+
+# Remove what install and install-vax wrote, and only that.
+uninstall:
+	for m in $(MODELS); do \
+	  d=$(LIBDIR)/$(TRIPLE)/$$m; \
+	  rm -f $$d/libpodatetime.a $$d/libpodatetime.so $$d/podatetime.library \
+	    $(foreach x,$(LIBMODS),$$d/$(x).sym $$d/$(x).owner); \
+	  rmdir $$d $(LIBDIR)/$(TRIPLE) 2>/dev/null; \
+	  d=$(LIBDIR)/vax-dec-vms/$$m; \
+	  rm -f $$d/podatetime.library $$d/podatetime_build.com $$d/podatetime_setup.com \
+	    $(foreach x,$(LIBMODS),$$d/$(x).mar $$d/$(x).sym $$d/$(x).owner); \
+	  rmdir $$d $(LIBDIR)/vax-dec-vms 2>/dev/null; \
+	  d=$(VMS_LIBDIR)/vax-dec-vms/$$m; \
+	  rm -f $$d/vmsinstants.library $$d/vmsinstants_build.com $$d/vmsinstants_setup.com \
+	    $$d/VmsInstants.mar $$d/VmsInstants.sym $$d/VmsInstants.owner; \
+	  rmdir $$d $(VMS_LIBDIR)/vax-dec-vms 2>/dev/null; \
+	done; \
+	rmdir $(LIBDIR) $(VMS_LIBDIR) 2>/dev/null; true
 
 clean:
 	rm -rf $(BUILD)

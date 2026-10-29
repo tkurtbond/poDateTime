@@ -34,6 +34,15 @@ both. The tests need only poc; their reference tables, made with
 Python's `datetime` and `zoneinfo` and with glibc's `strftime`, are
 checked in under `test/data/`, and `make data` makes them again.
 
+`make install` installs `podatetime` under both models in
+`$(POC_OBERON_LIBRARIES)/podatetime`, by default
+`/usr/local/sw/versions/oberon/poc/lib/podatetime`, once its tests pass;
+a program then builds with `-library-path` naming that directory.
+`make install-vax` adds the VAX's `podatetime` there and `vmsinstants`
+in `$(POC_OBERON_LIBRARIES)/vmsinstants`. `make uninstall` removes
+them. Install again after upgrading poc, which refuses a library another
+poc built.
+
 ## Documents
 
 `doc/date-time-design.md` is the design: a survey of what Ada,
