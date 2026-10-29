@@ -4,17 +4,25 @@ MODULE Clocks;
      monotonic clock and the process's CPU time as Durations. A monotonic
      reading is a Duration since an unspecified start, not an Instant, so
      that it cannot be taken for a date. The wall clock can jump when the
-     clock is set; the monotonic clock cannot.
+     clock is set; the monotonic clock cannot. On VMS the system clock is
+     local time, which TimeZones.Now turns into UTC through the local
+     zone (Q22); where that zone is Fixed(0), named "VMS", Now is really
+     local time.
 
      No ASSERTs. *)
 
-  IMPORT Durations, Instants, TimePlatform;
+  IMPORT Durations, Instants, Calendar, TimeZones, TimePlatform;
 
   PROCEDURE Now*(VAR t: Instants.Instant);
-    VAR seconds: HUGEINT; nanosecond: LONGINT;
+    VAR seconds: HUGEINT; nanosecond: LONGINT; odt: Calendar.OffsetDateTime;
   BEGIN
-    TimePlatform.WallClock(seconds, nanosecond);
-    Instants.FromUnix(t, seconds, nanosecond)
+    IF TimePlatform.WallClockIsLocal() THEN
+      TimeZones.Now(TimeZones.utc, odt);
+      Calendar.ToInstant(odt, t)
+    ELSE
+      TimePlatform.WallClock(seconds, nanosecond);
+      Instants.FromUnix(t, seconds, nanosecond)
+    END
   END Now;
 
   PROCEDURE Monotonic*(): Durations.Duration;

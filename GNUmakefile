@@ -2,7 +2,10 @@
 #
 # `make` builds the library podatetime under both size models in build/;
 # `make check` builds each test program under both and compares its output
-# with test/<Test>.expected. vax comes with step 6 of design 12.4.
+# with test/<Test>.expected. `make vax` builds podatetime and vmsinstants
+# for vax-dec-vms under both, as MACRO-32 for VMS to assemble, in
+# build/vax/vax-dec-vms/<model>/, laid out as the kit's [.LIB.POC] is
+# (design 12.2).
 # install is left for later: poc -install-library writes into poc's own
 # library directory, which needs root.
 
@@ -11,12 +14,13 @@ BUILD := build
 # a dependency only: poc compiles TimePlatform.c beside TimePlatform.Mod itself
 SRCS := src/llvm/TimePlatform.Mod $(wildcard src/*.Mod)
 C_SRCS := src/llvm/TimePlatform.c
-TEST_SRCS := test/TimeTests.Mod $(wildcard test/data/*.Mod) $(shell find test/data/zoneinfo -type f)
+TEST_SRCS := test/TimeTests.Mod test/llvm/ZoneFiles.Mod test/llvm/RealFormat.Mod $(wildcard test/data/*.Mod) $(shell find test/data/zoneinfo -type f)
 TESTS := DurationsTest InstantsTest CalendarTest ClocksTest TimeStringsTest TimeZonesTest PatternsTest
-IMPORTS := -import-path src -import-path src/llvm -import-path test -import-path test/data
+IMPORTS := -import-path src -import-path src/llvm -import-path test -import-path test/llvm \
+  -import-path test/data
 ZONEINFO := $(CURDIR)/test/data/zoneinfo
 
-.PHONY: all check check-o2 check-oc clean data zone-files
+.PHONY: all check check-o2 check-oc vax clean data zone-files
 .SECONDEXPANSION:
 
 all: $(BUILD)/O2/stamp $(BUILD)/OC/stamp
@@ -24,6 +28,26 @@ all: $(BUILD)/O2/stamp $(BUILD)/OC/stamp
 $(BUILD)/%/stamp: $(SRCS) $(C_SRCS)
 	mkdir -p $(BUILD)/$*
 	$(POC) -$* -output-dir $(BUILD)/$* -library podatetime $(SRCS)
+	touch $@
+
+# the VAX's: TimePlatform for VMS reads EXE$GL_ABSTIM_TICS, which SYS.STB
+# defines (Q8), and VmsInstants is a library of its own, which needs VMSLIB
+# (Q23)
+VAX_SRCS := src/vax/TimePlatform.Mod $(wildcard src/*.Mod)
+
+VAX_LIB := $(BUILD)/vax/vax-dec-vms
+
+vax: $(VAX_LIB)/O2/vmsinstants.stamp $(VAX_LIB)/OC/vmsinstants.stamp
+.SECONDARY: $(VAX_LIB)/O2/podatetime.stamp $(VAX_LIB)/OC/podatetime.stamp
+
+$(VAX_LIB)/%/podatetime.stamp: $(VAX_SRCS)
+	$(POC) -target vax-dec-vms -$* -output-dir $(BUILD)/vax -library podatetime \
+	  -link 'SYS$$SYSTEM:SYS.STB/SELECTIVE_SEARCH' $(VAX_SRCS)
+	touch $@
+
+$(VAX_LIB)/%/vmsinstants.stamp: src/vax/VmsInstants.Mod $(VAX_LIB)/%/podatetime.stamp
+	$(POC) -target vax-dec-vms -$* -output-dir $(BUILD)/vax -library-path $(BUILD)/vax \
+	  -library vmsinstants src/vax/VmsInstants.Mod
 	touch $@
 
 check: check-o2 check-oc
@@ -52,6 +76,7 @@ data:
 	python3 -I tools/strings-data.py > test/data/StringsData.Mod
 	python3 -I tools/zones-data.py > test/data/ZonesData.Mod
 	python3 -I tools/patterns-data.py > test/data/PatternsData.Mod
+	python3 -I tools/zone-files-data.py > test/data/ZoneFilesData.Mod
 
 # the TZif files the zone tables are made from, from the system's tzdata.zi
 zone-files:

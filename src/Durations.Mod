@@ -29,6 +29,9 @@ MODULE Durations;
     two20 = 1048576.0D0;  two40 = 1099511627776.0D0;
     (* the first LONGREAL past max: 2^63 *)
     limit = 9223372036854775808.0D0;
+    (* seconds well past max's 9.2 * 10^9, refused before x * second can
+       overflow, which on the VAX traps rather than giving an infinity *)
+    tooLong = 1.0D10;
 
   TYPE Duration* = HUGEINT;
 
@@ -182,10 +185,14 @@ MODULE Durations;
   PROCEDURE CheckedFromSeconds*(VAR d: Duration; x: LONGREAL): BOOLEAN;
     VAR y: LONGREAL; ok: BOOLEAN;
   BEGIN
-    y := x * second;
-    (* half away from zero; x # x is a NaN, which no comparison passes *)
-    IF y >= 0 THEN y := y + 0.5D0 ELSE y := y - 0.5D0 END;
-    ok := (x = x) & (y > -limit - 1024.0D0) & (y < limit);
+    (* x # x is a NaN, which no comparison passes *)
+    ok := (x = x) & (x > -tooLong) & (x < tooLong);
+    IF ok THEN
+      y := x * second;
+      (* half away from zero *)
+      IF y >= 0 THEN y := y + 0.5D0 ELSE y := y - 0.5D0 END;
+      ok := (y > -limit - 1024.0D0) & (y < limit)
+    END;
     IF ok THEN
       IF y >= 0 THEN d := Entier(y)
       (* -limit itself is MIN(HUGEINT), which Entier cannot negate *)

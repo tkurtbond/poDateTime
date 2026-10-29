@@ -454,7 +454,7 @@ MODULE TimeZones;
   PROCEDURE ReadBlock(b: Buffer; length, pos, size: LONGINT; VAR z: FileZone;
                       VAR end: LONGINT): BOOLEAN;
     VAR utCount, stdCount, leapCount, timeCount, typeCount, charCount, blockLength: HUGEINT;
-      i, p, types, chars, k, n, index: LONGINT; offset: HUGEINT; ok: BOOLEAN;
+      i, p, types, chars, k, n, index: LONGINT; offset, transition, previous: HUGEINT; ok: BOOLEAN;
   BEGIN
     ok := (pos + headerLength <= length) & IsMagic(b, pos);
     IF ok THEN
@@ -474,11 +474,14 @@ MODULE TimeZones;
       p := pos + headerLength;
       types := p + z.count * size + z.count;  chars := types + SHORT(typeCount) * 6;
       i := 0;
+      previous := 0;
       WHILE ok & (i < z.count) DO
-        z.transitions[i] := Signed(b, p + i * size, size);
+        transition := Signed(b, p + i * size, size);
+        z.transitions[i] := transition;
         index := ORD(b[p + z.count * size + i]);
         z.types[i] := SHORT(index);
-        ok := (index < typeCount) & ((i = 0) OR (z.transitions[i] > z.transitions[i - 1]));
+        ok := (index < typeCount) & ((i = 0) OR (transition > previous));
+        previous := transition;
         INC(i)
       END;
       i := 0;
@@ -713,10 +716,16 @@ MODULE TimeZones;
   END Resolve;
 
   PROCEDURE Now*(z: Zone; VAR odt: Calendar.OffsetDateTime);
-    VAR t: Instants.Instant; seconds: HUGEINT; nanosecond: LONGINT;
+    VAR t, u: Instants.Instant; dt: Calendar.DateTime; seconds: HUGEINT; nanosecond: LONGINT;
   BEGIN
     TimePlatform.WallClock(seconds, nanosecond);
     Instants.FromUnix(t, seconds, nanosecond);
+    IF TimePlatform.WallClockIsLocal() THEN
+      (* VMS (Q22): the clock is local time. In the autumn's repeated hour
+         the clock has been set back, so the later reading is the one *)
+      Calendar.FromUTCInstant(dt, t);
+      IF ToInstant(Local(), dt, later, u) THEN t := u END
+    END;
     ToLocal(z, t, odt)
   END Now;
 

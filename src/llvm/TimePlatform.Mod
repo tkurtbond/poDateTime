@@ -33,6 +33,12 @@ MODULE TimePlatform;
     seconds := s;  nanosecond := SHORT(n)
   END WallClock;
 
+  (* the Unix clock is UTC; VMS's is local (Q22) *)
+  PROCEDURE WallClockIsLocal*(): BOOLEAN;
+  BEGIN
+    RETURN FALSE
+  END WallClockIsLocal;
+
   (* CLOCK_MONOTONIC: since an unspecified start, never decreasing *)
   PROCEDURE MonotonicNanoseconds*(): HUGEINT;
   BEGIN

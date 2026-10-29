@@ -9,12 +9,16 @@ MODULE TimeZonesTest;
 
      The makefile sets TZDIR to test/data/zoneinfo/slim, so that Named
      reads the slim files, and TZ to the fat America/New_York, so that
-     the C library reads it for Local. *)
+     the C library reads it for Local. ZoneFiles says where the files are
+     and what the system has (Q24): on VMS it writes the files first, the
+     checks of Named and of the system's database are left out, and TZ
+     is New York's rule, which is checked from 2007. *)
 
-  IMPORT C := Calendar, I := Instants, TZ := TimeZones, Z := ZonesData, T := TimeTests;
+  IMPORT C := Calendar, I := Instants, TZ := TimeZones, Z := ZonesData, ZF := ZoneFiles,
+    T := TimeTests;
 
   CONST
-    files = "test/data/zoneinfo/";
+    newYork = "EST5EDT,M3.2.0,M11.1.0";   (* VMS's TZ *)
     cycle = 146097 * 86400;   (* seconds in 400 Gregorian years *)
 
   VAR
@@ -36,7 +40,7 @@ MODULE TimeZonesTest;
   PROCEDURE Open(form, zone: ARRAY OF CHAR): TZ.Zone;
     VAR z: TZ.Zone; path: ARRAY 256 OF CHAR;
   BEGIN
-    Concat(files, form, path);  Concat(path, "/", path);  Concat(path, zone, path);
+    ZF.Path(form, zone, path);
     ASSERT(TZ.FromFile(path, z));
     RETURN z
   END Open;
@@ -92,7 +96,7 @@ MODULE TimeZonesTest;
     IF current # zone THEN
       COPY(zone, current);
       fat := Open("fat", zone);  slim := Open("slim", zone);
-      ASSERT(TZ.Named(zone, named))
+      IF ZF.database THEN ASSERT(TZ.Named(zone, named)) END
     END
   END Switch;
 
@@ -102,8 +106,8 @@ MODULE TimeZonesTest;
     Switch(zone);
     Matches("Lookup fat", fat, seconds, offset, isDst, abbreviation);
     Matches("Lookup slim", slim, seconds, offset, isDst, abbreviation);
-    Matches("Lookup Named", named, seconds, offset, isDst, abbreviation);
-    IF zone = "America/New_York" THEN
+    IF ZF.database THEN Matches("Lookup Named", named, seconds, offset, isDst, abbreviation) END;
+    IF (zone = "America/New_York") & (seconds >= ZF.localSince) THEN
       Matches("Lookup Local", TZ.Local(), seconds, offset, isDst, abbreviation);
       Returns("Returns Local", TZ.Local(), seconds)
     END;
@@ -137,7 +141,7 @@ MODULE TimeZonesTest;
     Switch(zone);
     SetDateTime(dt, year, month, day, hour, minute, second);
     In("ToInstant fat", fat);  In("ToInstant slim", slim);
-    IF zone = "America/New_York" THEN In("ToInstant Local", TZ.Local()) END
+    IF (zone = "America/New_York") & (earlier >= ZF.localSince) THEN In("ToInstant Local", TZ.Local()) END
   END LocalRow;
 
   PROCEDURE RuleRow(text: ARRAY OF CHAR; seconds: HUGEINT; offset: LONGINT; isDst: BOOLEAN;
@@ -253,7 +257,7 @@ MODULE TimeZonesTest;
   PROCEDURE NoFile(name: ARRAY OF CHAR);
     VAR z: TZ.Zone; path: ARRAY 256 OF CHAR;
   BEGIN
-    Concat(files, "made/", path);  Concat(path, name, path);
+    ZF.Path("made", name, path);
     z := TZ.utc;
     IF TZ.FromFile(path, z) OR (z # TZ.utc) THEN Concat("FromFile refuses ", name, s);  T.True(s, FALSE)
     ELSE T.Count(1)
@@ -261,13 +265,13 @@ MODULE TimeZonesTest;
   END NoFile;
 
   PROCEDURE Files;
-    VAR z: TZ.Zone;
+    VAR z: TZ.Zone; path: ARRAY 256 OF CHAR;
   BEGIN
     z := Open("made", "v1");
     Has("v1 DST", z, 994000000, -14400, TRUE, "EDT");
     Has("v1 after", z, 1278000000, -18000, FALSE, "EST");
     Has("v1 before", z, 0, -18000, FALSE, "EST");
-    z.GetName(s);  T.Str("FromFile name", s, "test/data/zoneinfo/made/v1");
+    z.GetName(s);  ZF.Path("made", "v1", path);  T.Str("FromFile name", s, path);
     z := Open("made", "good");
     Has("footer DST", z, 1278000000, -14400, TRUE, "EDT");
     Has("footer standard", z, 1267000000, -18000, FALSE, "EST");
@@ -306,13 +310,15 @@ MODULE TimeZonesTest;
   PROCEDURE Names;
     VAR z, y: TZ.Zone; long: ARRAY 300 OF CHAR; i: LONGINT;
   BEGIN
-    ASSERT(TZ.Named("America/New_York", z));
-    z.GetName(s);  T.Str("Named name", s, "America/New_York");
-    ASSERT(TZ.Named("America/New_York", y));
-    T.True("Named kept", z = y);
-    ASSERT(TZ.Named("Europe/London", y));
-    T.True("Named another", z # y);
-    Has("Named London", y, 1783000000, 3600, TRUE, "BST");
+    IF ZF.database THEN
+      ASSERT(TZ.Named("America/New_York", z));
+      z.GetName(s);  T.Str("Named name", s, "America/New_York");
+      ASSERT(TZ.Named("America/New_York", y));
+      T.True("Named kept", z = y);
+      ASSERT(TZ.Named("Europe/London", y));
+      T.True("Named another", z # y);
+      Has("Named London", y, 1783000000, 3600, TRUE, "BST")
+    END;
     NoName("");  NoName("/etc/localtime");  NoName("../fat/America/New_York");
     NoName("America/../America/New_York");  NoName("America/./New_York");  NoName(".");
     NoName("America/New York");  NoName("America/New_York ");  NoName("Nowhere/Zone");
@@ -321,11 +327,13 @@ MODULE TimeZonesTest;
     long[256] := 0X;  NoName(long);
     (* the system's own database, where only what every release agrees on
        is checked *)
-    ASSERT(TZ.FromFile("/usr/share/zoneinfo/America/New_York", z));
-    Has("system New York summer", z, 1783000000, -14400, TRUE, "EDT");
-    Has("system New York winter", z, 1767225600, -18000, FALSE, "EST");
-    ASSERT(TZ.FromFile("/usr/share/zoneinfo/Asia/Kolkata", z));
-    Has("system Kolkata", z, 1767225600, 19800, FALSE, "IST")
+    IF ZF.database THEN
+      ASSERT(TZ.FromFile("/usr/share/zoneinfo/America/New_York", z));
+      Has("system New York summer", z, 1783000000, -14400, TRUE, "EDT");
+      Has("system New York winter", z, 1767225600, -18000, FALSE, "EST");
+      ASSERT(TZ.FromFile("/usr/share/zoneinfo/Asia/Kolkata", z));
+      Has("system Kolkata", z, 1767225600, 19800, FALSE, "IST")
+    END
   END Names;
 
   PROCEDURE Locals;
@@ -333,14 +341,20 @@ MODULE TimeZonesTest;
   BEGIN
     z := TZ.Local();
     T.True("Local kept", z = TZ.Local());
-    (* TZ is the path of the fat America/New_York, which differs between
-       checkouts *)
-    z.GetName(s);  suffix := "test/data/zoneinfo/fat/America/New_York";
-    n := 0;  WHILE s[n] # 0X DO INC(n) END;
-    m := 0;  WHILE suffix[m] # 0X DO INC(m) END;
-    WHILE (m > 0) & (n > 0) & (s[n - 1] = suffix[m - 1]) DO DEC(n);  DEC(m) END;
-    T.True("Local name", m = 0);
-    Has("Local earliest", z, I.earliest.seconds, -17762, FALSE, "LMT");
+    z.GetName(s);
+    IF ZF.database THEN
+      (* TZ is the path of the fat America/New_York, which differs between
+         checkouts *)
+      suffix := "test/data/zoneinfo/fat/America/New_York";
+      n := 0;  WHILE s[n] # 0X DO INC(n) END;
+      m := 0;  WHILE suffix[m] # 0X DO INC(m) END;
+      WHILE (m > 0) & (n > 0) & (s[n - 1] = suffix[m - 1]) DO DEC(n);  DEC(m) END;
+      T.True("Local name", m = 0);
+      Has("Local earliest", z, I.earliest.seconds, -17762, FALSE, "LMT")
+    ELSE
+      T.Str("Local name", s, newYork);
+      Has("Local earliest", z, I.earliest.seconds, -18000, FALSE, "EST")
+    END;
     Has("Local latest", z, I.latest.seconds, -18000, FALSE, "EST")
   END Locals;
 
@@ -358,7 +372,7 @@ MODULE TimeZonesTest;
     END Gives;
 
   BEGIN
-    ASSERT(TZ.Named("America/New_York", z));
+    IF ZF.database THEN ASSERT(TZ.Named("America/New_York", z)) ELSE z := Open("fat", "America/New_York") END;
     At(1793193906, t);  TZ.ToLocal(z, t, odt);
     T.Int("ToLocal", odt.hour * 10000 + odt.minute * 100 + odt.second, 92506);
     T.Int("ToLocal offset", odt.offset, -14400);
@@ -396,6 +410,7 @@ MODULE TimeZonesTest;
 
 BEGIN
   T.Start("TimeZones");
+  ZF.Prepare;
   FixedZones;  Rules;  Files;  Names;  Locals;  Resolving;  Clock;  Tables;
   T.Finish
 END TimeZonesTest.

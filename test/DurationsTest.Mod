@@ -1,8 +1,10 @@
 MODULE DurationsTest;
 
-  (* Tests of Durations, above all at the edges, where it saturates. *)
+  (* Tests of Durations, above all at the edges, where it saturates. The
+     checks with a NaN or an infinity run only where a LONGREAL has them
+     (RealFormat, design Q25). *)
 
-  IMPORT D := Durations, T := TimeTests;
+  IMPORT D := Durations, RF := RealFormat, T := TimeTests;
 
   CONST
     max = D.max;  min = D.min;
@@ -138,14 +140,18 @@ MODULE DurationsTest;
     T.Int("FromSeconds -2^63", D.FromSeconds(-9223372036.854775808D0), min);
     T.Int("FromSeconds huge", D.FromSeconds(1.0D300), max);
     T.Int("FromSeconds -huge", D.FromSeconds(-1.0D300), min);
-    x := 0.0D0;  x := x / x;
-    T.Int("FromSeconds NaN", D.FromSeconds(x), 0);
+    T.Int("FromSeconds largest", D.FromSeconds(MAX(LONGREAL)), max);
+    T.Int("FromSeconds -largest", D.FromSeconds(-MAX(LONGREAL)), min);
     r := 7;
-    T.True("CheckedFromSeconds NaN", ~D.CheckedFromSeconds(r, x) & (r = 7));
-    x := 1.0D300;  x := x * x;
-    T.Int("FromSeconds infinity", D.FromSeconds(x), max);
-    T.Int("FromSeconds -infinity", D.FromSeconds(-x), min);
-    T.True("CheckedFromSeconds infinity", ~D.CheckedFromSeconds(r, x) & (r = 7));
+    IF RF.ieee THEN
+      x := 0.0D0;  x := x / x;
+      T.Int("FromSeconds NaN", D.FromSeconds(x), 0);
+      T.True("CheckedFromSeconds NaN", ~D.CheckedFromSeconds(r, x) & (r = 7));
+      x := 1.0D300;  x := x * x;
+      T.Int("FromSeconds infinity", D.FromSeconds(x), max);
+      T.Int("FromSeconds -infinity", D.FromSeconds(-x), min);
+      T.True("CheckedFromSeconds infinity", ~D.CheckedFromSeconds(r, x) & (r = 7))
+    END;
     T.True("CheckedFromSeconds max", ~D.CheckedFromSeconds(r, 9223372037.0D0));
     T.True("CheckedFromSeconds", D.CheckedFromSeconds(r, 2.0D0) & (r = 2 * s))
   END Seconds;

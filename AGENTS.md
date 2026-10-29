@@ -26,18 +26,20 @@ reviewed; `TimePlatform`'s zone procedures come with step 4. Step 3
 decided during it. Step 4 (`TimeZones`, and `TimePlatform`'s zone
 procedures for LLVM) is done and reviewed; Q17 was decided during it.
 Step 5 (`TimeStrings`, patterns) is done and reviewed; Q18-Q21 were
-decided during it. Step 6 (the VAX port) is next. Steps 1-5 pass under
-both models on Linux and on the
+decided during it. Step 6 (the VAX port) is in progress; Q22-Q25 were
+decided during it. Steps 1-5 pass under both models on Linux and on the
 local BSD VMs (cymoril, OpenBSD i386; artos, NetBSD amd64; alerik,
-FreeBSD amd64), not yet on the VAX.
+FreeBSD amd64). The whole suite's VAX results are not yet checked.
 
 ## The compiler
 
-- **Use the installed `poc`**: `/usr/bin/poc`, version 0.10.0 (d849a15)
+- **Use the installed `poc`**: `/usr/bin/poc`, version 0.10.1 (84cde99)
   since 2026-10-28. Its libraries are in `/usr/lib/poc`. Check what the
   compiler accepts by running it, not by reading its source.
   0.10.0 allows external variables, which `Monotonic` on VMS needs
-  (design Q8).
+  (design Q8). 0.10.1 fixes a VAX program's start, which set up the
+  collector only when `NEW` was in the same compilation, so a test
+  built against the library had its stack never marked.
 - **Under `-OC`, `SHORT` of a `HUGEINT` gives a 32-bit `INTEGER`**, not
   the 64-bit `LONGINT`, and cuts the value without a word; a `HUGEINT`
   cannot be assigned to a `LONGINT` at all. Use `SHORT` only for values
@@ -74,7 +76,8 @@ FreeBSD amd64), not yet on the VAX.
   cannot be `-strict` clean, because it needs `HUGEINT`.
 - **Only `TimePlatform` is per target** (`src/llvm/`, `src/vax/`). The
   VAX-only `VmsInstants` (`src/vax/`) is the one module that uses
-  `VMSLIB`.
+  `VMSLIB`, and is a library of its own, `vmsinstants` (Q23), so that
+  `podatetime` needs only `POCRTL`.
   Everything in `src/` is portable and compiled unchanged for both.
 - **Module names** must not collide with poc's runtime modules, nor with
   VMSLIB's `DateTimes` and `Timers`. Oberon has one global module
