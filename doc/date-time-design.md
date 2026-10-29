@@ -1279,8 +1279,17 @@ Each step is reviewed before the next one starts.
     or a time differential.*
   
   *So `Local()` on VMS is the `TZ` logical's rule, or else `Fixed(0)`
-  (§8.3). The printed 5.5-2 manuals have not been searched. The
-  evidence is the 5.5-2 system and its own help library.*
+  (§8.3).*
+
+  *Decided 2026-10-29: absent in VAX/VMS 5.5-2, and `Local()` stays the
+  `TZ` logical's rule or `Fixed(0)`. The 5.x manuals agree with the
+  system. None of them names `SYS$TIMEZONE_DIFFERENTIAL`, a time
+  differential, a time zone, UTC or GMT. The 5.5 Introduction to System
+  Services (AA-LA68B) and the 5.2 Internals (§11.4) have the system time
+  changed with `$SETIME` at the changes between standard and daylight
+  saving time, so it is local time with no offset recorded. The only
+  time service is the Internals' `DTSS$TIMESERVICE_HOOK`, a hook for
+  optional software, which the library does not use.*
 - **Q8.** On VMS, is there a non-decreasing clock better than a clamped
   `SYS$GETTIM`, such as `EXE$GL_ABSTIM_TICS` through `SYS.STB`, that an
   unprivileged program can read? *Decided 2026-10-28: yes. `Monotonic`
