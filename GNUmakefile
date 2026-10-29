@@ -35,12 +35,23 @@ IMPORTS := -import-path src -import-path src/llvm -import-path test -import-path
   -import-path test/data
 ZONEINFO := $(CURDIR)/test/data/zoneinfo
 
-.PHONY: all check check-o2 check-oc vax install install-vax uninstall clean data zone-files
+.PHONY: all check check-o2 check-oc vax install install-vax uninstall clean data zone-files \
+  FORCE
 .SECONDEXPANSION:
 
 all: $(BUILD)/O2/stamp $(BUILD)/OC/stamp
 
-$(BUILD)/%/stamp: $(SRCS) $(C_SRCS)
+# what poc -version says, rewritten only when it changes, so that every
+# stamp below depends on the compiler: a library records the poc that
+# built it, and another poc refuses it
+POC_STAMP := $(BUILD)/poc-version
+
+$(POC_STAMP): FORCE
+	@mkdir -p $(BUILD)
+	@$(POC) -version > $@.new
+	@if cmp -s $@.new $@; then rm -f $@.new; else mv $@.new $@; fi
+
+$(BUILD)/%/stamp: $(SRCS) $(C_SRCS) $(POC_STAMP)
 	mkdir -p $(BUILD)/$*
 	$(POC) -$* -output-dir $(BUILD)/$* -library podatetime $(SRCS)
 	touch $@
@@ -55,7 +66,7 @@ VAX_LIB := $(BUILD)/vax/vax-dec-vms
 vax: $(VAX_LIB)/O2/vmsinstants.stamp $(VAX_LIB)/OC/vmsinstants.stamp
 .SECONDARY: $(VAX_LIB)/O2/podatetime.stamp $(VAX_LIB)/OC/podatetime.stamp
 
-$(VAX_LIB)/%/podatetime.stamp: $(VAX_SRCS)
+$(VAX_LIB)/%/podatetime.stamp: $(VAX_SRCS) $(POC_STAMP)
 	$(POC) -target vax-dec-vms -$* -output-dir $(BUILD)/vax -library podatetime \
 	  -link 'SYS$$SYSTEM:SYS.STB/SELECTIVE_SEARCH' $(VAX_SRCS)
 	touch $@
@@ -71,7 +82,8 @@ check-o2: $(TESTS:%=$(BUILD)/O2/%.passed)
 check-oc: $(TESTS:%=$(BUILD)/OC/%.passed)
 
 # $* is <model>/<Test>
-$(BUILD)/%.passed: $(SRCS) $(C_SRCS) $(TEST_SRCS) test/$$(notdir $$*).Mod test/$$(notdir $$*).expected
+$(BUILD)/%.passed: $(SRCS) $(C_SRCS) $(TEST_SRCS) test/$$(notdir $$*).Mod test/$$(notdir $$*).expected \
+  $(POC_STAMP)
 	mkdir -p $(BUILD)/$(dir $*)
 	$(POC) -$(patsubst %/,%,$(dir $*)) -output-dir $(BUILD)/$(dir $*) $(IMPORTS) \
 	  -o $(BUILD)/$* test/$(notdir $*).Mod
