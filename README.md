@@ -6,7 +6,8 @@ poDateTime is a library of Oberon-2 modules for dates, times, durations
 and time zones, built with poc, the
 [Peaseblossom Oberon Compiler](https://github.com/tkurtbond/peaseblossom).
 It runs on Linux, NetBSD, OpenBSD and FreeBSD through poc's LLVM
-backend; a port to VAX/VMS 5.5-2 is the next step.
+backend, and on VAX/VMS 5.5-2 through its VAX backend, where
+`VmsInstants` converts between VMS times and the library's.
 
 ## The modules
 
@@ -33,6 +34,9 @@ models, `-O2` and `-OC`, in `build/`; `make check` runs the tests under
 both. The tests need only poc; their reference tables, made with
 Python's `datetime` and `zoneinfo` and with glibc's `strftime`, are
 checked in under `test/data/`, and `make data` makes them again.
+`make vax` builds `podatetime` and `vmsinstants` for VAX/VMS, as
+MACRO-32 for VMS to assemble; their tests are copied to the VAX and run
+there by hand.
 
 `make install` installs `podatetime` under both models in
 `$(POC_OBERON_LIBRARIES)/podatetime`, by default

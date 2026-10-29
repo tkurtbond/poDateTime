@@ -26,10 +26,11 @@ reviewed; `TimePlatform`'s zone procedures come with step 4. Step 3
 decided during it. Step 4 (`TimeZones`, and `TimePlatform`'s zone
 procedures for LLVM) is done and reviewed; Q17 was decided during it.
 Step 5 (`TimeStrings`, patterns) is done and reviewed; Q18-Q21 were
-decided during it. Step 6 (the VAX port) is in progress; Q22-Q25 were
-decided during it. Steps 1-5 pass under both models on Linux and on the
-local BSD VMs (cymoril, OpenBSD i386; artos, NetBSD amd64; alerik,
-FreeBSD amd64). The whole suite's VAX results are not yet checked.
+decided during it. Step 6 (the VAX port) is done and reviewed;
+Q22-Q25 were decided during it. All six steps are done. The whole suite passes under both
+models on Linux, on the local BSD VMs (cymoril, OpenBSD i386; artos,
+NetBSD amd64; alerik, FreeBSD amd64) and on the VAX (VAX/VMS 5.5-2),
+where `VmsInstantsTest` also runs.
 
 ## The compiler
 
@@ -48,7 +49,11 @@ FreeBSD amd64). The whole suite's VAX results are not yet checked.
   stored, so a function's result compared at once can differ from the
   same value stored. Tests store it in a global first.
 - **Building and testing:** `make` builds the library under both size
-  models in `build/`; `make check` runs the tests under both.
+  models in `build/`; `make check` runs the tests under both. `make
+  vax` builds `podatetime` and `vmsinstants` for the VAX, as MACRO-32;
+  their tests are built and run on the VAX by hand (design §12.3).
+  `make install`, `make install-vax` and `make uninstall` handle
+  `$(POC_OBERON_LIBRARIES)`.
 - **`~/Repos/Oberon/Peaseblossom` is reference only.** Read its
   `doc/users-guide.md`, its runtime (`rtl/`) and its `AGENTS.md` for
   conventions, but never modify, build or commit anything there.
