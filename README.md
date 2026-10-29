@@ -29,6 +29,8 @@ backend, and on VAX/VMS 5.5-2 through its VAX backend, where
 
 ## Building
 
+poDateTime needs poc 0.10.1 or later.
+
 `make` builds the library `podatetime` under both of poc's size
 models, `-O2` and `-OC`, in `build/`; `make check` runs the tests under
 both. The tests need only poc; their reference tables, made with
